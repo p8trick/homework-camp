@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
 <title>Daily Camp · 每日营地</title>
 
-<!-- iOS "Add to Home Screen" standalone support -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Daily Camp">
@@ -17,96 +16,58 @@
 
 <style>
   :root{
-    --grass:#5B8C3A;
-    --grass-dark:#3F6528;
-    --dirt:#8B5A2B;
-    --dirt-dark:#6B4420;
-    --stone:#7D7D7D;
-    --sky:#7EC8E3;
-    --diamond:#4FD8E8;
-    --gold:#F2C14E;
-    --night:#1C2541;
-    --ink:#22201B;
-    --paper:#FAF7F0;
-    --danger:#D9534F;
+    --grass:#5B8C3A; --grass-dark:#3F6528; --dirt:#8B5A2B; --dirt-dark:#6B4420;
+    --stone:#7D7D7D; --sky:#7EC8E3; --diamond:#4FD8E8; --gold:#F2C14E;
+    --night:#1C2541; --ink:#22201B; --paper:#FAF7F0; --danger:#D9534F;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;height:100%;}
   body{
     background:var(--sky);
-    background-image:
-      linear-gradient(180deg, var(--sky) 0%, var(--sky) 60%, var(--grass) 60%, var(--grass) 100%);
-    font-family:'Baloo 2', system-ui, sans-serif;
-    color:var(--ink);
-    min-height:100vh;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    padding:16px 12px 32px;
-    overflow-x:hidden;
-    position:relative;
+    background-image:linear-gradient(180deg, var(--sky) 0%, var(--sky) 60%, var(--grass) 60%, var(--grass) 100%);
+    font-family:'Baloo 2', system-ui, sans-serif; color:var(--ink);
+    min-height:100vh; display:flex; flex-direction:column; align-items:center;
+    padding:calc(20px + env(safe-area-inset-top)) 12px 32px; overflow-x:hidden; position:relative;
   }
   .pixel{font-family:'Press Start 2P', monospace;}
 
-  /* ---------- Corner controls (persistent, above both pages) ---------- */
-  .corner-btn{
-    position:fixed; top:10px; left:10px; z-index:200;
-    font-family:'Press Start 2P', monospace;
-    font-size:9px; padding:6px 8px;
+  /* ---------- In-flow controls (respect iPhone notch / Dynamic Island, no fixed corners) ---------- */
+  .lang-row{ width:100%; max-width:480px; display:flex; justify-content:flex-end; margin-bottom:2px; }
+  .lang-btn{
+    font-family:'Press Start 2P', monospace; font-size:9px; padding:6px 8px;
     background:var(--paper); border:2px solid var(--ink);
     box-shadow:2px 2px 0 rgba(0,0,0,.3);
     cursor:pointer; color:var(--ink); user-select:none;
   }
+  .back-btn{
+    display:block; width:100%; max-width:480px; text-align:left;
+    font-size:13px; font-weight:800; color:var(--stone);
+    background:none; border:none; cursor:pointer;
+    margin-bottom:10px; padding:4px 0;
+  }
 
-  /* ---------- Header ---------- */
-  header{
-    width:100%; max-width:480px;
-    text-align:center;
-    margin:30px 0 14px;
-  }
-  header h1{
-    font-size:15px;
-    line-height:1.6;
-    margin:0 0 4px;
-    color:var(--paper);
-    text-shadow:2px 2px 0 var(--night);
-  }
+  header{ width:100%; max-width:480px; text-align:center; margin:6px 0 14px; }
+  header h1{ font-size:15px; line-height:1.6; margin:0 0 4px; color:var(--paper); text-shadow:2px 2px 0 var(--night); }
   header p{margin:0; font-weight:700; color:var(--night); font-size:14px;}
 
-  /* ---------- Home page wrapper ---------- */
   #homePage{ width:100%; display:flex; flex-direction:column; align-items:center; }
 
-  /* ---------- Month calendar ---------- */
   .cal-wrap{
-    width:100%; max-width:480px;
-    background:rgba(255,255,255,.5);
-    border:3px solid var(--ink);
-    padding:10px;
-    margin-bottom:14px;
+    width:100%; max-width:480px; background:rgba(255,255,255,.5);
+    border:3px solid var(--ink); padding:10px; margin-bottom:14px;
   }
-  .cal-nav{
-    display:flex; align-items:center; justify-content:space-between;
-    margin-bottom:8px;
-  }
+  .cal-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
   .cal-nav button{
     font-family:'Baloo 2', sans-serif; font-weight:800; font-size:16px;
-    background:var(--paper); border:2px solid var(--ink);
-    width:30px; height:30px; cursor:pointer;
+    background:var(--paper); border:2px solid var(--ink); width:30px; height:30px; cursor:pointer;
   }
   .cal-nav button:disabled{opacity:.3; cursor:default;}
   .cal-month-label{font-weight:800; font-size:13px;}
-  .cal-weekdays, .cal-grid{
-    display:grid; grid-template-columns:repeat(7,1fr); gap:4px;
-  }
-  .cal-weekdays div{
-    text-align:center; font-size:10px; font-weight:800; color:var(--stone);
-  }
+  .cal-weekdays, .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .cal-weekdays div{ text-align:center; font-size:10px; font-weight:800; color:var(--stone); }
   .cal-cell{
-    aspect-ratio:1;
-    display:flex; align-items:center; justify-content:center;
-    position:relative;
-    font-size:11px; font-weight:700;
-    border:2px solid transparent;
+    aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+    position:relative; font-size:11px; font-weight:700; border:2px solid transparent;
   }
   .cal-cell.blank{visibility:hidden;}
   .cal-cell.future{color:rgba(0,0,0,.25);}
@@ -115,45 +76,27 @@
   .cal-cell.today{outline:2px dashed var(--night); outline-offset:1px; cursor:pointer; background:var(--diamond);}
   .cal-cell .stardot{position:absolute; bottom:1px; font-size:6px;}
 
-  /* ---------- Card (shared look for home CTA + overlay content) ---------- */
   .card{
-    width:100%; max-width:480px;
-    background:var(--paper);
-    border:4px solid var(--ink);
-    box-shadow:6px 6px 0 rgba(0,0,0,.3);
-    padding:18px;
-    margin-bottom:14px;
+    width:100%; max-width:480px; background:var(--paper); border:4px solid var(--ink);
+    box-shadow:6px 6px 0 rgba(0,0,0,.3); padding:18px; margin-bottom:14px;
   }
-  .progress-row{
-    display:flex; justify-content:space-between; align-items:center;
-    margin-bottom:10px; font-weight:700; font-size:13px; color:var(--stone);
-  }
-  .timer-badge{
-    font-weight:800; font-size:12px; color:var(--night);
-    background:var(--sky); border:2px solid var(--ink); padding:2px 8px;
-  }
-  .subject-tag{
-    display:inline-block; padding:3px 10px; font-size:11px; font-weight:800;
-    border:2px solid var(--ink); background:var(--sky);
-  }
+  .progress-row{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-weight:700; font-size:13px; color:var(--stone); }
+  .timer-badge{ font-weight:800; font-size:12px; color:var(--night); background:var(--sky); border:2px solid var(--ink); padding:2px 8px; }
+  .subject-tag{ display:inline-block; padding:3px 10px; font-size:11px; font-weight:800; border:2px solid var(--ink); background:var(--sky); }
   .subject-tag.math{background:var(--gold);}
 
   .question-box{ text-align:center; margin:18px 0; }
   .qtext{ font-size:26px; font-weight:800; line-height:1.4; word-break:break-word; }
   .speak-btn{
-    display:inline-flex; align-items:center; justify-content:center;
-    width:40px; height:40px; margin-top:8px;
-    background:var(--diamond); border:3px solid var(--ink);
-    font-size:18px; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; margin-top:8px;
+    background:var(--diamond); border:3px solid var(--ink); font-size:18px; cursor:pointer;
   }
   .speak-btn:active{transform:translate(2px,2px);}
 
   .options{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:16px; }
   .opt-btn{
-    padding:16px 8px; font-size:20px; font-weight:700;
-    font-family:'Baloo 2', sans-serif;
-    background:var(--paper); border:3px solid var(--ink);
-    box-shadow:3px 3px 0 rgba(0,0,0,.25);
+    padding:16px 8px; font-size:20px; font-weight:700; font-family:'Baloo 2', sans-serif;
+    background:var(--paper); border:3px solid var(--ink); box-shadow:3px 3px 0 rgba(0,0,0,.25);
     cursor:pointer; min-height:56px;
   }
   .opt-btn:active{transform:translate(2px,2px); box-shadow:1px 1px 0 rgba(0,0,0,.25);}
@@ -162,39 +105,28 @@
   .opt-btn:disabled{opacity:.55;}
 
   .feedback{ text-align:center; min-height:26px; font-weight:800; font-size:15px; margin-top:10px; }
-  .feedback.good{color:var(--grass-dark);}
-  .feedback.bad{color:var(--danger);}
+  .feedback.good{color:var(--grass-dark);} .feedback.bad{color:var(--danger);}
 
-  /* ---------- Backpack ---------- */
   .backpack{
-    width:100%; max-width:480px;
-    background:var(--dirt);
-    border:4px solid var(--ink);
-    box-shadow:6px 6px 0 rgba(0,0,0,.3);
-    padding:12px 14px;
-    display:flex; align-items:center; gap:8px;
-    flex-wrap:wrap;
+    width:100%; max-width:480px; background:var(--dirt); border:4px solid var(--ink);
+    box-shadow:6px 6px 0 rgba(0,0,0,.3); padding:12px 14px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
   }
-  .backpack .label{
-    color:var(--paper); font-weight:800; font-size:12px; margin-right:4px; flex-basis:100%;
-  }
-  .loot{
-    width:34px; height:34px;
-    display:flex; align-items:center; justify-content:center;
-    font-size:18px; background:var(--night); border:2px solid var(--ink);
-  }
+  .backpack .label{ color:var(--paper); font-weight:800; font-size:12px; margin-right:4px; flex-basis:100%; }
+  .loot{ width:34px; height:34px; display:flex; align-items:center; justify-content:center; font-size:18px; background:var(--night); border:2px solid var(--ink); }
   .loot.empty{opacity:.25;}
 
-  /* ---------- Home CTA content ---------- */
   .home{ text-align:center; }
-  .streak-big{ font-size:34px; font-weight:800; margin:6px 0 18px; }
+  .streak-big{ font-size:34px; font-weight:800; margin:6px 0 2px; }
+  .best-streak{ font-size:12px; font-weight:700; color:var(--stone); margin-bottom:14px; }
+  .badge-row{ display:flex; gap:6px; justify-content:center; flex-wrap:wrap; margin-bottom:16px; }
+  .badge-chip{
+    font-size:18px; width:34px; height:34px; display:flex; align-items:center; justify-content:center;
+    background:var(--paper); border:2px solid var(--ink); box-shadow:2px 2px 0 rgba(0,0,0,.25);
+  }
+  .badge-chip.locked{ opacity:.25; filter:grayscale(1); }
   .primary-btn{
-    width:100%; padding:18px 10px;
-    font-family:'Baloo 2', sans-serif;
-    font-size:19px; font-weight:800;
-    background:var(--gold); border:3px solid var(--ink);
-    box-shadow:4px 4px 0 rgba(0,0,0,.3);
-    cursor:pointer;
+    width:100%; padding:18px 10px; font-family:'Baloo 2', sans-serif; font-size:19px; font-weight:800;
+    background:var(--gold); border:3px solid var(--ink); box-shadow:4px 4px 0 rgba(0,0,0,.3); cursor:pointer;
   }
   .primary-btn:active{transform:translate(2px,2px); box-shadow:2px 2px 0 rgba(0,0,0,.3);}
   .primary-btn.review-mode{background:var(--diamond);}
@@ -204,59 +136,44 @@
     text-decoration:underline; background:none; border:none; cursor:pointer; font-weight:700;
   }
 
-  /* ---------- Full-page overlay (quiz / review / done) ---------- */
   #pageOverlay{
     position:fixed; inset:0; z-index:100;
     background:var(--sky);
-    background-image:
-      linear-gradient(180deg, var(--sky) 0%, var(--sky) 55%, var(--grass) 55%, var(--grass) 100%);
-    display:none;
-    flex-direction:column;
-    align-items:center;
-    overflow-y:auto;
-    padding:52px 12px 28px;
+    background-image:linear-gradient(180deg, var(--sky) 0%, var(--sky) 55%, var(--grass) 55%, var(--grass) 100%);
+    display:none; flex-direction:column; align-items:center; overflow-y:auto;
+    padding:calc(20px + env(safe-area-inset-top)) 12px 28px;
   }
   #pageOverlay.show{ display:flex; }
-  .back-btn{
-    display:inline-flex; align-items:center; gap:4px;
-    font-size:12px; font-weight:800; color:var(--stone);
-    background:none; border:none; cursor:pointer;
-    margin-bottom:10px; padding:4px 0;
-    width:100%; max-width:480px;
-  }
 
-  /* ---------- Review / Done screens ---------- */
   .review-list{ display:flex; flex-direction:column; gap:8px; margin-top:8px; }
-  .review-item{
-    display:flex; align-items:center; gap:10px;
-    border:2px solid var(--ink); padding:8px 10px;
-    font-size:13px; font-weight:700;
-  }
+  .review-item{ display:flex; align-items:center; gap:10px; border:2px solid var(--ink); padding:8px 10px; font-size:13px; font-weight:700; }
   .review-item .mark{ font-size:16px; flex-shrink:0; }
   .review-item .qp{ flex:1; }
   .review-item .ans{ color:var(--stone); font-size:11px; }
   .review-item.wrong{ background:#FBEAE9; }
   .review-item.right{ background:#EEF6E8; }
   .review-summary{ font-size:13px; font-weight:800; margin-bottom:4px; }
-  .review-time{ font-size:12px; color:var(--stone); font-weight:700; margin-bottom:10px; }
+  .review-time{ font-size:12px; color:var(--stone); font-weight:700; margin-bottom:2px; }
   .stars-line{ font-size:26px; letter-spacing:4px; margin:6px 0; }
 
   .done{ text-align:center; }
   .done .big{font-size:48px; margin:6px 0;}
   .done h2{font-size:18px; color:var(--grass-dark); margin:8px 0;}
   .done p{font-size:14px; color:var(--stone); font-weight:700;}
+  .badge-banner{
+    background:var(--gold); border:3px solid var(--ink); padding:10px; margin:10px 0;
+    font-size:13px; font-weight:800; box-shadow:3px 3px 0 rgba(0,0,0,.25);
+  }
 
   footer{ margin-top:auto; padding-top:20px; font-size:10px; color:rgba(0,0,0,.35); text-align:center; }
 </style>
 </head>
 <body>
 
-<div class="corner-btn" id="langToggle">中文</div>
-
 <div id="homePage">
+  <div class="lang-row"><button class="lang-btn" id="langToggle">中文</button></div>
   <header>
     <h1 class="pixel" id="appTitle">Daily Camp</h1>
-    <p id="streakText">0 day streak</p>
   </header>
 
   <div class="cal-wrap">
@@ -271,11 +188,11 @@
 
   <div class="card" id="homeCard"></div>
 
-  <footer id="footerNote">v1.3.0 · Saved on this device only · phone sync not set up yet</footer>
+  <footer id="footerNote">v1.5.0 · Saved on this device only · phone sync not set up yet</footer>
 </div>
 
 <div id="pageOverlay">
-  <button class="back-btn" id="overlayBack">← Home</button>
+  <button class="back-btn" id="backBtn">← Home</button>
   <div class="card" id="overlayCard"></div>
   <div class="backpack" id="overlayBackpack" style="display:none;">
     <div class="label" id="backpackLabel">Backpack · 0/10</div>
@@ -288,14 +205,17 @@
   "use strict";
 
   /* ================= Config ================= */
-  const KID_NAME = "George"; // <-- change this to your son's actual name if "George" was just a placeholder
-  const KID_NAME_ZH = "乔治"; // Chinese rendering used for the zh voice greeting
+  const KID_NAME = "George";
+  const KID_NAME_ZH = "乔治";
+  const MILESTONES = [3,7,14,30,60,100];
+  const BADGE_ICON = {3:"🔥",7:"⛺",14:"🏕️",30:"🏆",60:"💎",100:"👑"};
 
   /* ================= i18n ================= */
   const STRINGS = {
     en: {
       appTitle:"Daily Camp", appSub:"",
-      streak:n=>`${n} day streak`,
+      streak:n=>`🔥 ${n}`,
+      bestStreak:n=>`Best streak: ${n} days`,
       startBtn:"Start Today", continueBtn:(i,t)=>`Continue (${i}/${t})`,
       doneBtnReview:"Done for today · Review",
       hint:"Tap a day on the calendar to review past practice",
@@ -306,19 +226,22 @@
       correctFb:"Found treasure! Correct 💎", wrongFb:"Good try — correct answer shown in green",
       doneTitle:"Camp complete for today!",
       doneScore:(c,t)=>`${c} / ${t} correct`,
-      timeSpent:s=>`Time: ${s}`,
-      homeBtn:"Back Home",
+      timeSpent:s=>`Time spent: ${s}`,
+      completedAt:s=>`Finished at: ${s}`,
       yourAnswer:"Your answer: ", correctLabel:"  Correct: ",
       noRecord:"No record for this day",
       weekdays:["S","M","T","W","T","F","S"],
       months:["January","February","March","April","May","June","July","August","September","October","November","December"],
       langBtn:"中文",
       footerNote:v=>`${v} · Saved on this device only · phone sync not set up yet`,
-      greeting:`Welcome back, ${KID_NAME}!`
+      greeting:`Welcome back, ${KID_NAME}!`,
+      newBadge:label=>`🎉 New badge unlocked: ${label}!`,
+      badgeLabel:m=>`${m}-Day Streak`
     },
     zh: {
       appTitle:"每日营地", appSub:"DAILY CAMP",
-      streak:n=>`连续打卡 ${n} 天`,
+      streak:n=>`🔥 ${n}`,
+      bestStreak:n=>`最长连胜：${n} 天`,
       startBtn:"开始今日练习", continueBtn:(i,t)=>`继续今日练习 (${i}/${t})`,
       doneBtnReview:"今日已完成 · 查看今天的复习",
       hint:"点击日历里的日期可以回顾之前学过的内容",
@@ -329,18 +252,20 @@
       correctFb:"挖到宝了！答对啦 💎", wrongFb:"再想想～正确答案已标绿",
       doneTitle:"今天的营地任务完成啦！",
       doneScore:(c,t)=>`答对 ${c} / ${t} 题`,
-      timeSpent:s=>`用时 ${s}`,
-      homeBtn:"返回主页",
+      timeSpent:s=>`用时：${s}`,
+      completedAt:s=>`完成时间：${s}`,
       yourAnswer:"你的答案：", correctLabel:"　正确答案：",
       noRecord:"这天还没有记录哦",
       weekdays:["日","一","二","三","四","五","六"],
       months:["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],
       langBtn:"EN",
       footerNote:v=>`${v} · 仅保存在本机 · 手机同步尚未开启`,
-      greeting:`欢迎回来${KID_NAME_ZH}`
+      greeting:`欢迎回来${KID_NAME_ZH}`,
+      newBadge:label=>`🎉 解锁新徽章：${label}！`,
+      badgeLabel:m=>`连胜 ${m} 天`
     }
   };
-  const VERSION = "v1.3.0";
+  const VERSION = "v1.5.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -354,21 +279,21 @@
     try{ raw = JSON.parse(localStorage.getItem(STORE_KEY)); }catch(e){ raw = null; }
     if(!raw){
       raw = {
-        lang:"en",
-        level:{ en:1, math:1 },
-        streak:0,
-        lastCompleteDate:null,
-        history:{},
+        lang:"en", level:{ en:1, math:1 }, streak:0, bestStreak:0, badges:[],
+        lastCompleteDate:null, history:{},
         today:{ date:null, items:[], answers:[], timeSpent:0 }
       };
     }
     if(!raw.lang) raw.lang = "en";
+    if(raw.bestStreak == null) raw.bestStreak = raw.streak||0;
+    if(!raw.badges) raw.badges = [];
     if(raw.today.timeSpent == null) raw.today.timeSpent = 0;
     return raw;
   }
   function saveState(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
 
   let state = loadState();
+  let justEarnedBadges = []; // transient, shown once on the Done screen
 
   /* ================= Question banks (leveled) ================= */
   const SIGHT_WORDS = [
@@ -473,12 +398,8 @@
     const msg = t("greeting");
     const lang = state.lang === "zh" ? "zh-CN" : "en-US";
     const attempt = ()=>speak(msg, lang);
-    // iOS/Safari sometimes hasn't loaded voices on first launch; give it a moment.
-    if(window.speechSynthesis.getVoices().length || voicesReady){
-      attempt();
-    } else {
-      setTimeout(attempt, 300);
-    }
+    if(window.speechSynthesis.getVoices().length || voicesReady) attempt();
+    else setTimeout(attempt, 300);
   }
 
   /* ================= Timer ================= */
@@ -492,6 +413,12 @@
   function fmtTime(sec){
     const m = Math.floor(sec/60), s = sec%60;
     return `${pad2(m)}:${pad2(s)}`;
+  }
+  function fmtClock(ms){
+    if(!ms) return "--:--";
+    const d = new Date(ms);
+    return d.toLocaleTimeString(state.lang==="zh" ? "zh-CN" : "en-US",
+      state.lang==="zh" ? {hour:"2-digit", minute:"2-digit", hour12:false} : {hour:"numeric", minute:"2-digit", hour12:true});
   }
   function startTimer(){
     if(sessionStartTs) return;
@@ -529,9 +456,8 @@
   const homeCard = document.getElementById("homeCard");
   const overlayCard = document.getElementById("overlayCard");
   const pageOverlay = document.getElementById("pageOverlay");
-  const overlayBack = document.getElementById("overlayBack");
+  const backBtn = document.getElementById("backBtn");
   const overlayBackpack = document.getElementById("overlayBackpack");
-  const streakText = document.getElementById("streakText");
   const lootRow = document.getElementById("lootRow");
   const backpackLabel = document.getElementById("backpackLabel");
   const appTitleEl = document.getElementById("appTitle");
@@ -545,7 +471,7 @@
 
   const LOOT_ICONS = ["💎","💎","🥇","💎","🥇","💎","💎","🥇","💎","🏆"];
 
-  let view = "home"; // 'home' | 'quiz' | 'review' | 'done'
+  let view = "home";
   let reviewKey = null;
 
   const now0 = new Date();
@@ -555,7 +481,7 @@
   function goHome(){ stopTimer(); view = "home"; render(); }
   function showQuiz(){ view = "quiz"; startTimer(); render(); }
 
-  overlayBack.addEventListener("click", goHome);
+  backBtn.addEventListener("click", goHome);
 
   langToggle.addEventListener("click", ()=>{
     state.lang = state.lang === "en" ? "zh" : "en";
@@ -576,10 +502,9 @@
 
   function render(){
     appTitleEl.innerHTML = t("appTitle") + (t("appSub") ? "<br>"+t("appSub") : "");
-    streakText.textContent = t("streak")(state.streak);
     langToggle.textContent = t("langBtn");
     footerNote.textContent = t("footerNote")(VERSION);
-    overlayBack.textContent = t("back");
+    backBtn.textContent = t("back");
 
     const isOverlay = (view === "quiz" || view === "review" || view === "done");
     pageOverlay.classList.toggle("show", isOverlay);
@@ -674,9 +599,16 @@
       onClick = showQuiz;
     }
 
+    const badgeRow = MILESTONES.map(m=>{
+      const earned = state.badges.includes(m);
+      return `<div class="badge-chip ${earned?'':'locked'}" title="${t('badgeLabel')(m)}">${BADGE_ICON[m]}</div>`;
+    }).join("");
+
     homeCard.innerHTML = `
       <div class="home">
-        <div class="streak-big">🔥 ${state.streak}</div>
+        <div class="streak-big">${t("streak")(state.streak)}</div>
+        <div class="best-streak">${t("bestStreak")(state.bestStreak)}</div>
+        <div class="badge-row">${badgeRow}</div>
         <button class="${btnClass}" id="startBtn">${btnLabel}</button>
         <p class="hint">${t("hint")}</p>
         ${(idx > 0 && !todayDone) ? `<button class="giveup-link" id="giveUpBtn">${t("giveUp")}</button>` : ""}
@@ -698,7 +630,8 @@
   function renderReview(key){
     const isTodayLive = key === todayStr() && !(state.history[key]);
     const record = isTodayLive
-      ? { correct: state.today.answers.filter(a=>a.correct).length, items: state.today.answers, timeSpent: state.today.timeSpent, stars: getStars(state.today.answers.filter(a=>a.correct).length, state.today.items.length||10) }
+      ? { correct: state.today.answers.filter(a=>a.correct).length, items: state.today.answers, timeSpent: state.today.timeSpent,
+          stars: getStars(state.today.answers.filter(a=>a.correct).length, state.today.items.length||10), completedAt: null }
       : state.history[key];
     if(!record){ goHome(); return; }
     const total = (record.items||[]).length || 10;
@@ -718,6 +651,7 @@
       <div class="review-summary">${key} · ${t("doneScore")(record.correct, total)}</div>
       <div class="stars-line">${starsHtml(record.stars||0)}</div>
       <div class="review-time">${t("timeSpent")(fmtTime(record.timeSpent||0))}</div>
+      <div class="review-time">${t("completedAt")(fmtClock(record.completedAt))}</div>
       <div class="review-list">${rows || `<p>${t("noRecord")}</p>`}</div>
     `;
   }
@@ -728,9 +662,11 @@
     stopTimer();
     const correctCount = state.today.answers.filter(a=>a.correct).length;
     const total = state.today.items.length;
+    const nowMs = Date.now();
     state.history[key] = {
       done:true, correct: correctCount, items: state.today.answers.slice(),
-      timeSpent: state.today.timeSpent||0, stars: getStars(correctCount, total)
+      timeSpent: state.today.timeSpent||0, stars: getStars(correctCount, total),
+      completedAt: nowMs
     };
     const y = new Date(); y.setDate(y.getDate()-1);
     const yKey = keyOf(y);
@@ -739,6 +675,11 @@
     } else {
       state.streak = 1;
     }
+    if(state.streak > state.bestStreak) state.bestStreak = state.streak;
+
+    justEarnedBadges = MILESTONES.filter(m => state.streak >= m && !state.badges.includes(m));
+    justEarnedBadges.forEach(m => state.badges.push(m));
+
     state.lastCompleteDate = key;
     saveState(state);
   }
@@ -827,14 +768,23 @@
     const correctCount = state.today.answers.filter(a=>a.correct).length;
     const total = state.today.items.length;
     const stars = getStars(correctCount, total);
+    const key = todayStr();
+    const completedAt = state.history[key] ? state.history[key].completedAt : Date.now();
+
+    const badgeBanner = justEarnedBadges.length
+      ? justEarnedBadges.map(m=>`<div class="badge-banner">${t("newBadge")(BADGE_ICON[m]+" "+t("badgeLabel")(m))}</div>`).join("")
+      : "";
+
     overlayCard.innerHTML = `
       <div class="done">
         <div class="big">⛺</div>
         <h2>${t("doneTitle")}</h2>
         <div class="stars-line">${starsHtml(stars)}</div>
-        <p>${t("doneScore")(correctCount, total)}<br>${t("timeSpent")(fmtTime(state.today.timeSpent||0))}</p>
+        <p>${t("doneScore")(correctCount, total)}<br>${t("timeSpent")(fmtTime(state.today.timeSpent||0))}<br>${t("completedAt")(fmtClock(completedAt))}</p>
+        ${badgeBanner}
       </div>
     `;
+    justEarnedBadges = [];
   }
 
   /* ================= Init ================= */
