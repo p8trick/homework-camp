@@ -27,7 +27,7 @@
     background-image:linear-gradient(180deg, var(--sky) 0%, var(--sky) 60%, var(--grass) 60%, var(--grass) 100%);
     font-family:'Baloo 2', system-ui, sans-serif; color:var(--ink);
     min-height:100vh; display:flex; flex-direction:column; align-items:center;
-    padding:calc(20px + env(safe-area-inset-top)) 12px 32px; overflow-x:hidden; position:relative;
+    padding:calc(env(safe-area-inset-top) + 6px) 12px 32px; overflow-x:hidden; position:relative;
   }
   .pixel{font-family:'Press Start 2P', monospace;}
 
@@ -143,7 +143,7 @@
     background:var(--sky);
     background-image:linear-gradient(180deg, var(--sky) 0%, var(--sky) 55%, var(--grass) 55%, var(--grass) 100%);
     display:none; flex-direction:column; align-items:center; overflow-y:auto;
-    padding:calc(20px + env(safe-area-inset-top)) 12px 28px;
+    padding:calc(env(safe-area-inset-top) + 6px) 12px 28px;
   }
   #pageOverlay.show{ display:flex; }
 
@@ -236,7 +236,7 @@
 
   <div class="card" id="homeCard"></div>
 
-  <footer id="footerNote">v1.6.0 · Saved on this device only · phone sync not set up yet</footer>
+  <footer id="footerNote">v1.6.2 · Saved on this device only · phone sync not set up yet</footer>
 </div>
 
 <div id="pageOverlay">
@@ -327,7 +327,7 @@
       badgeLabel:m=>`连胜 ${m} 天`
     }
   };
-  const VERSION = "v1.6.0";
+  const VERSION = "v1.6.2";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
