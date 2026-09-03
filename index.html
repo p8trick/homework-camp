@@ -78,6 +78,9 @@
   .cal-cell.today{outline:2px dashed var(--night); outline-offset:1px; cursor:pointer; background:var(--diamond);}
   .cal-cell .stardot{position:absolute; bottom:1px; font-size:6px;}
 
+  .home-columns{ width:100%; max-width:480px; display:flex; flex-direction:column; }
+  .home-columns > .cal-wrap, .home-columns > .card{ margin-bottom:14px; }
+
   .card{
     width:100%; max-width:480px; background:var(--paper); border:4px solid var(--ink);
     box-shadow:6px 6px 0 rgba(0,0,0,.3); padding:18px; margin-bottom:14px;
@@ -211,6 +214,26 @@
   }
   .done .big{ animation:pop-in .5s ease-out; }
   .stars-line.pop{ animation:pop-in .5s ease-out .15s both; }
+
+  /* ================= iPad / landscape / wide-screen layout ================= */
+  @media (min-width:780px){
+    .header-row, .home-columns{ max-width:920px; }
+    .home-columns{ flex-direction:row; align-items:flex-start; gap:24px; }
+    .home-columns > .cal-wrap, .home-columns > .card{ max-width:none; flex:1; margin-bottom:0; }
+
+    .solo-card{ max-width:700px; }
+    .backpack{ max-width:700px; }
+
+    .qtext{ font-size:34px; }
+    .qtext.big{ font-size:56px; }
+    .options{ gap:16px; }
+    .opt-btn{ font-size:24px; padding:22px 10px; min-height:72px; }
+    .primary-btn{ font-size:22px; padding:22px 10px; }
+    .streak-big{ font-size:44px; }
+    .badge-chip{ width:42px; height:42px; font-size:22px; }
+    .loot{ width:42px; height:42px; font-size:22px; }
+    .cal-cell{ font-size:14px; }
+  }
 </style>
 </head>
 <body>
@@ -224,24 +247,26 @@
     <div class="gear-btn" id="settingsBtn">⚙️</div>
   </div>
 
-  <div class="cal-wrap">
-    <div class="cal-nav">
-      <button id="calPrev">‹</button>
-      <span class="cal-month-label" id="calMonthLabel"></span>
-      <button id="calNext">›</button>
+  <div class="home-columns">
+    <div class="cal-wrap">
+      <div class="cal-nav">
+        <button id="calPrev">‹</button>
+        <span class="cal-month-label" id="calMonthLabel"></span>
+        <button id="calNext">›</button>
+      </div>
+      <div class="cal-weekdays" id="calWeekdays"></div>
+      <div class="cal-grid" id="calGrid"></div>
     </div>
-    <div class="cal-weekdays" id="calWeekdays"></div>
-    <div class="cal-grid" id="calGrid"></div>
+
+    <div class="card" id="homeCard"></div>
   </div>
 
-  <div class="card" id="homeCard"></div>
-
-  <footer id="footerNote">v1.6.2 · Saved on this device only · phone sync not set up yet</footer>
+  <footer id="footerNote">v1.7.0 · Saved on this device only · phone sync not set up yet</footer>
 </div>
 
 <div id="pageOverlay">
   <button class="back-btn" id="backBtn">← Home</button>
-  <div class="card" id="overlayCard"></div>
+  <div class="card solo-card" id="overlayCard"></div>
   <div class="backpack" id="overlayBackpack" style="display:none;">
     <div class="label" id="backpackLabel">Backpack · 0/10</div>
     <div id="lootRow" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
@@ -327,7 +352,7 @@
       badgeLabel:m=>`连胜 ${m} 天`
     }
   };
-  const VERSION = "v1.6.2";
+  const VERSION = "v1.7.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -894,7 +919,7 @@
         <span class="timer-badge" id="liveTimer">⏱ ${fmtTime(currentElapsedSeconds())}</span>
       </div>
       <div class="question-box">
-        <div class="qtext" style="${q.big?'font-size:40px;':''}">${q.prompt}</div>
+        <div class="qtext ${q.big?'big':''}">${q.prompt}</div>
         ${q.speak ? `<div class="speak-btn" id="speakBtn">🔊</div>` : ""}
       </div>
       <div class="options" id="optionsRow"></div>
