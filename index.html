@@ -31,24 +31,26 @@
   }
   .pixel{font-family:'Press Start 2P', monospace;}
 
-  /* ---------- In-flow controls (respect iPhone notch / Dynamic Island, no fixed corners) ---------- */
-  .lang-row{ width:100%; max-width:480px; display:flex; justify-content:flex-end; margin-bottom:2px; }
-  .lang-btn{
-    font-family:'Press Start 2P', monospace; font-size:9px; padding:6px 8px;
-    background:var(--paper); border:2px solid var(--ink);
-    box-shadow:2px 2px 0 rgba(0,0,0,.3);
-    cursor:pointer; color:var(--ink); user-select:none;
+  /* ---------- Header row: title centered, gear at right, no lopsided whitespace ---------- */
+  .header-row{
+    width:100%; max-width:480px; display:grid;
+    grid-template-columns:32px 1fr 32px; align-items:center;
+    margin-bottom:14px;
   }
+  .gear-btn{
+    width:32px; height:32px; display:flex; align-items:center; justify-content:center;
+    font-size:16px; background:var(--paper); border:2px solid var(--ink);
+    box-shadow:2px 2px 0 rgba(0,0,0,.3); cursor:pointer;
+  }
+  header{ text-align:center; }
+  header h1{ font-size:15px; line-height:1.6; margin:0; color:var(--paper); text-shadow:2px 2px 0 var(--night); }
+
   .back-btn{
     display:block; width:100%; max-width:480px; text-align:left;
     font-size:13px; font-weight:800; color:var(--stone);
     background:none; border:none; cursor:pointer;
     margin-bottom:10px; padding:4px 0;
   }
-
-  header{ width:100%; max-width:480px; text-align:center; margin:6px 0 14px; }
-  header h1{ font-size:15px; line-height:1.6; margin:0 0 4px; color:var(--paper); text-shadow:2px 2px 0 var(--night); }
-  header p{margin:0; font-weight:700; color:var(--night); font-size:14px;}
 
   #homePage{ width:100%; display:flex; flex-direction:column; align-items:center; }
 
@@ -166,15 +168,61 @@
   }
 
   footer{ margin-top:auto; padding-top:20px; font-size:10px; color:rgba(0,0,0,.35); text-align:center; }
+
+  /* ---------- Settings modal ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0; z-index:300; background:rgba(0,0,0,.45);
+    display:none; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal-backdrop.show{ display:flex; }
+  .modal-card{
+    width:100%; max-width:340px; background:var(--paper); border:4px solid var(--ink);
+    box-shadow:6px 6px 0 rgba(0,0,0,.35); padding:18px;
+  }
+  .modal-card h3{ margin:0 0 14px; font-size:15px; }
+  .settings-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 0; border-bottom:2px solid rgba(0,0,0,.08); font-size:13px; font-weight:700;
+  }
+  .settings-row.muted{ color:var(--stone); font-weight:700; font-size:11px; border-bottom:none; }
+  .settings-row button{
+    font-family:'Baloo 2', sans-serif; font-weight:800; font-size:13px;
+    padding:6px 12px; background:var(--diamond); border:2px solid var(--ink); cursor:pointer;
+  }
+  .modal-close{
+    width:100%; margin-top:14px; padding:10px; font-family:'Baloo 2', sans-serif; font-weight:800;
+    background:var(--paper); border:2px solid var(--ink); cursor:pointer;
+  }
+
+  /* ---------- Confetti ---------- */
+  #confettiLayer{ position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:250; }
+  .confetti-piece{
+    position:absolute; top:-12px; width:8px; height:8px;
+    animation-name:confetti-fall; animation-timing-function:ease-in; animation-fill-mode:forwards;
+  }
+  @keyframes confetti-fall{
+    0%{ transform:translateY(0) rotate(0deg); opacity:1; }
+    100%{ transform:translateY(115vh) rotate(360deg); opacity:.85; }
+  }
+  @keyframes pop-in{
+    0%{ transform:scale(.4); opacity:0; }
+    70%{ transform:scale(1.08); opacity:1; }
+    100%{ transform:scale(1); }
+  }
+  .done .big{ animation:pop-in .5s ease-out; }
+  .stars-line.pop{ animation:pop-in .5s ease-out .15s both; }
 </style>
 </head>
 <body>
 
+<div id="confettiLayer"></div>
+
 <div id="homePage">
-  <div class="lang-row"><button class="lang-btn" id="langToggle">中文</button></div>
-  <header>
-    <h1 class="pixel" id="appTitle">Daily Camp</h1>
-  </header>
+  <div class="header-row">
+    <div></div>
+    <header><h1 class="pixel" id="appTitle">Daily Camp</h1></header>
+    <div class="gear-btn" id="settingsBtn">⚙️</div>
+  </div>
 
   <div class="cal-wrap">
     <div class="cal-nav">
@@ -188,7 +236,7 @@
 
   <div class="card" id="homeCard"></div>
 
-  <footer id="footerNote">v1.5.0 · Saved on this device only · phone sync not set up yet</footer>
+  <footer id="footerNote">v1.6.0 · Saved on this device only · phone sync not set up yet</footer>
 </div>
 
 <div id="pageOverlay">
@@ -197,6 +245,19 @@
   <div class="backpack" id="overlayBackpack" style="display:none;">
     <div class="label" id="backpackLabel">Backpack · 0/10</div>
     <div id="lootRow" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="settingsModal">
+  <div class="modal-card">
+    <h3 id="settingsTitle">Settings</h3>
+    <div class="settings-row">
+      <span id="langRowLabel">Language</span>
+      <button id="langToggle">中文</button>
+    </div>
+    <div class="settings-row muted" id="versionRow"></div>
+    <div class="settings-row muted" id="moreRow"></div>
+    <button class="modal-close" id="closeSettings">Close</button>
   </div>
 </div>
 
@@ -209,6 +270,7 @@
   const KID_NAME_ZH = "乔治";
   const MILESTONES = [3,7,14,30,60,100];
   const BADGE_ICON = {3:"🔥",7:"⛺",14:"🏕️",30:"🏆",60:"💎",100:"👑"};
+  const RECENT_DAYS = 25; // words used within this window are avoided when picking new ones
 
   /* ================= i18n ================= */
   const STRINGS = {
@@ -232,7 +294,7 @@
       noRecord:"No record for this day",
       weekdays:["S","M","T","W","T","F","S"],
       months:["January","February","March","April","May","June","July","August","September","October","November","December"],
-      langBtn:"中文",
+      settingsTitle:"Settings", langRowLabel:"Language", langBtn:"中文", moreRow:"More options coming soon",
       footerNote:v=>`${v} · Saved on this device only · phone sync not set up yet`,
       greeting:`Welcome back, ${KID_NAME}!`,
       newBadge:label=>`🎉 New badge unlocked: ${label}!`,
@@ -258,14 +320,14 @@
       noRecord:"这天还没有记录哦",
       weekdays:["日","一","二","三","四","五","六"],
       months:["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],
-      langBtn:"EN",
+      settingsTitle:"设置", langRowLabel:"界面语言", langBtn:"EN", moreRow:"更多设置，敬请期待",
       footerNote:v=>`${v} · 仅保存在本机 · 手机同步尚未开启`,
       greeting:`欢迎回来${KID_NAME_ZH}`,
       newBadge:label=>`🎉 解锁新徽章：${label}！`,
       badgeLabel:m=>`连胜 ${m} 天`
     }
   };
-  const VERSION = "v1.5.0";
+  const VERSION = "v1.6.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -280,93 +342,145 @@
     if(!raw){
       raw = {
         lang:"en", level:{ en:1, math:1 }, streak:0, bestStreak:0, badges:[],
-        lastCompleteDate:null, history:{},
+        lastCompleteDate:null, history:{}, usedLog:{ en:[] },
         today:{ date:null, items:[], answers:[], timeSpent:0 }
       };
     }
     if(!raw.lang) raw.lang = "en";
     if(raw.bestStreak == null) raw.bestStreak = raw.streak||0;
     if(!raw.badges) raw.badges = [];
+    if(!raw.usedLog) raw.usedLog = { en: [] };
+    if(!raw.usedLog.en) raw.usedLog.en = [];
     if(raw.today.timeSpent == null) raw.today.timeSpent = 0;
     return raw;
   }
   function saveState(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
 
   let state = loadState();
-  let justEarnedBadges = []; // transient, shown once on the Done screen
+  let justEarnedBadges = [];
 
-  /* ================= Question banks (leveled) ================= */
+  /* ================= Question banks (leveled, expanded for ~1 month variety) ================= */
   const SIGHT_WORDS = [
-    ["cat","🐱"], ["dog","🐶"], ["sun","☀️"], ["book","📖"], ["fish","🐟"],
-    ["star","⭐"], ["tree","🌳"], ["ball","⚽"], ["milk","🥛"], ["bird","🐦"],
-    ["car","🚗"], ["house","🏠"], ["apple","🍎"], ["moon","🌙"], ["rain","🌧️"]
+    ["cat","🐱"],["dog","🐶"],["sun","☀️"],["book","📖"],["fish","🐟"],["star","⭐"],["tree","🌳"],
+    ["ball","⚽"],["milk","🥛"],["bird","🐦"],["car","🚗"],["house","🏠"],["apple","🍎"],["moon","🌙"],
+    ["rain","🌧️"],["egg","🥚"],["cake","🎂"],["box","📦"],["cup","☕"],["hat","🎩"],["bed","🛏️"],
+    ["duck","🦆"],["frog","🐸"],["bee","🐝"],["leaf","🍃"],["cloud","☁️"],["snow","❄️"],["fire","🔥"],
+    ["ice","🧊"],["key","🔑"],["ring","💍"],["sock","🧦"],["shoe","👟"],["clock","🕐"],["phone","📱"],
+    ["chair","🪑"],["table","🪵"],["door","🚪"],["flower","🌸"],["banana","🍌"],["grapes","🍇"],
+    ["pizza","🍕"],["train","🚂"],["boat","⛵"],["kite","🪁"]
   ];
   const MISSING_LETTER = [
-    ["c_t","a","o","cat"], ["d_g","o","e","dog"], ["s_n","u","i","sun"],
-    ["r_n","u","a","run"], ["b_g","i","u","big"], ["h_t","o","a","hot"],
-    ["p_g","i","u","pig"], ["c_p","u","a","cup"]
+    ["c_t","a","o","cat"],["d_g","o","e","dog"],["s_n","u","i","sun"],["r_n","u","a","run"],
+    ["b_g","i","u","big"],["h_t","o","a","hot"],["p_g","i","u","pig"],["c_p","u","a","cup"],
+    ["b_g","a","o","bag"],["b_d","e","a","bed"],["b_s","u","a","bus"],["c_p","a","o","cap"],
+    ["d_n","e","a","den"],["f_n","a","o","fan"],["f_t","i","e","fit"],["f_x","o","a","fox"],
+    ["g_p","a","o","gap"],["h_n","e","a","hen"],["h_t","i","e","hit"],["h_p","o","a","hop"],
+    ["j_m","a","o","jam"],["j_t","e","a","jet"],["j_g","o","a","jog"],["k_t","i","e","kit"],
+    ["l_p","a","o","lap"],["l_g","e","a","leg"],["l_d","i","e","lid"],["l_g","o","a","log"],
+    ["m_d","a","o","mad"],["m_p","a","o","map"],["m_p","o","a","mop"],["m_d","u","a","mud"],
+    ["n_t","e","a","net"],["n_t","u","a","nut"],["p_n","a","o","pan"],["p_n","e","a","pen"],
+    ["p_n","i","e","pin"],["p_p","o","a","pop"],["p_t","o","a","pot"],["r_t","a","o","rat"],
+    ["r_g","u","a","rug"],["s_d","a","o","sad"],["s_t","i","e","sit"],["t_n","a","o","tan"],
+    ["t_p","a","o","tap"],["t_n","e","a","ten"],["t_n","i","e","tin"],["t_p","o","a","top"],
+    ["t_b","u","a","tub"],["v_n","a","o","van"],["w_t","e","a","wet"],["w_g","i","e","wig"],
+    ["w_n","i","e","win"],["z_p","i","e","zip"]
   ];
   const SENTENCE_FILL = [
-    ["I ___ a book.", "have", "has"], ["She ___ happy.", "is", "am"],
-    ["They ___ playing.", "are", "is"], ["We ___ friends.", "are", "am"],
-    ["He ___ to school.", "goes", "go"], ["I ___ like pizza.", "do", "does"]
+    ["I ___ a book.","have","has"],["She ___ happy.","is","am"],["They ___ playing.","are","is"],
+    ["We ___ friends.","are","am"],["He ___ to school.","goes","go"],["I ___ like pizza.","do","does"],
+    ["He ___ like carrots.","doesn't","don't"],["It ___ raining.","is","are"],
+    ["The dogs ___ barking.","are","is"],["My mom ___ a teacher.","is","are"],
+    ["I ___ two brothers.","have","has"],["She ___ a red bike.","has","have"],
+    ["Yesterday I ___ to the park.","went","go"],["Last night we ___ a movie.","watched","watch"],
+    ["This is ___ book.","my","me"],["That is ___ bag over there.","his","him"],
+    ["Can I have ___ apple?","an","a"],["I want ___ banana.","a","an"],
+    ["The cat is ___ the box.","in","on"],["The book is ___ the table.","on","in"],
+    ["There ___ three cups.","are","is"],["There ___ one dog.","is","are"],
+    ["We ___ going to the zoo.","are","is"],["___ you like ice cream?","Do","Does"],
+    ["___ she like ice cream?","Does","Do"],["I ___ my homework already.","did","do"],
+    ["They ___ at the park now.","are","is"],["The sun ___ bright today.","is","are"],
+    ["My shoes ___ new.","are","is"],["This cake ___ delicious.","is","are"]
   ];
 
-  function genEnglish(level){
-    if(level <= 2){
-      const [word, emoji] = SIGHT_WORDS[Math.floor(Math.random()*SIGHT_WORDS.length)];
-      let wrongEmojis = SIGHT_WORDS.filter(w=>w[1]!==emoji).sort(()=>Math.random()-0.5).slice(0,3).map(w=>w[1]);
-      let opts = [emoji, ...wrongEmojis].sort(()=>Math.random()-0.5);
-      return { subject:"en", prompt: word, speak: word, options: opts, answer: emoji, big:true };
-    } else if(level <= 4){
-      const [word, right, wrong, full] = MISSING_LETTER[Math.floor(Math.random()*MISSING_LETTER.length)];
-      let opts = [right, wrong].sort(()=>Math.random()-0.5);
-      return { subject:"en", prompt: word, speak: full, options: opts, answer: right };
-    } else {
-      const [sentence, right, wrong] = SENTENCE_FILL[Math.floor(Math.random()*SENTENCE_FILL.length)];
-      let opts = [right, wrong].sort(()=>Math.random()-0.5);
-      return { subject:"en", prompt: sentence, speak: sentence.replace("___", right), options: opts, answer: right };
-    }
+  function recentEnKeys(){
+    const cutoff = Date.now() - RECENT_DAYS*24*3600*1000;
+    return new Set(state.usedLog.en.filter(e=>e.ts>=cutoff).map(e=>e.key));
+  }
+  function logEnUsed(keys){
+    const cutoff = Date.now() - (RECENT_DAYS+10)*24*3600*1000;
+    state.usedLog.en = state.usedLog.en.filter(e=>e.ts>=cutoff);
+    keys.forEach(k=> state.usedLog.en.push({ ts: Date.now(), key:k }));
   }
 
-  function genMath(level){
-    function mkAdd(max){
-      const a = 1+Math.floor(Math.random()*max), b = 1+Math.floor(Math.random()*max);
-      return { prompt:`${a} + ${b} = ?`, answer:(a+b) };
-    }
-    function mkSub(max){
-      let a = 1+Math.floor(Math.random()*max), b = 1+Math.floor(Math.random()*max);
-      if(b>a) [a,b]=[b,a];
-      return { prompt:`${a} - ${b} = ?`, answer:(a-b) };
-    }
-    function mkSkip(){
-      const step = [2,5,10][Math.floor(Math.random()*3)];
-      const start = step*(1+Math.floor(Math.random()*5));
-      return { prompt:`${start}, ${start+step}, ${start+step*2}, ?`, answer:(start+step*3) };
-    }
+  function poolForLevel(level){
+    if(level<=2) return { pool:SIGHT_WORDS, keyFn:w=>w[0], make:makeSightQuestion };
+    if(level<=4) return { pool:MISSING_LETTER, keyFn:w=>w[3], make:makeLetterQuestion };
+    return { pool:SENTENCE_FILL, keyFn:w=>w[0], make:makeSentenceQuestion };
+  }
+  function makeSightQuestion(row){
+    const [word, emoji] = row;
+    let wrongEmojis = SIGHT_WORDS.filter(w=>w[1]!==emoji).sort(()=>Math.random()-0.5).slice(0,3).map(w=>w[1]);
+    let opts = [emoji, ...wrongEmojis].sort(()=>Math.random()-0.5);
+    return { subject:"en", prompt: word, speak: word, options: opts, answer: emoji, big:true };
+  }
+  function makeLetterQuestion(row){
+    const [word, right, wrong, full] = row;
+    let opts = [right, wrong].sort(()=>Math.random()-0.5);
+    return { subject:"en", prompt: word, speak: full, options: opts, answer: right };
+  }
+  function makeSentenceQuestion(row){
+    const [sentence, right, wrong] = row;
+    let opts = [right, wrong].sort(()=>Math.random()-0.5);
+    return { subject:"en", prompt: sentence, speak: sentence.replace("___", right), options: opts, answer: right };
+  }
+
+  function buildEnglishItems(level, count){
+    const { pool, keyFn, make } = poolForLevel(level);
+    const recent = recentEnKeys();
+    let avail = pool.filter(row=>!recent.has(keyFn(row)));
+    if(avail.length < count) avail = pool.slice(); // pool exhausted for this window: allow repeats
+    const chosen = avail.sort(()=>Math.random()-0.5).slice(0, count);
+    logEnUsed(chosen.map(keyFn));
+    return chosen.map(make);
+  }
+
+  function genMathOne(level){
+    function mkAdd(max){ const a=1+Math.floor(Math.random()*max), b=1+Math.floor(Math.random()*max); return { prompt:`${a} + ${b} = ?`, answer:(a+b) }; }
+    function mkSub(max){ let a=1+Math.floor(Math.random()*max), b=1+Math.floor(Math.random()*max); if(b>a)[a,b]=[b,a]; return { prompt:`${a} - ${b} = ?`, answer:(a-b) }; }
+    function mkSkip(){ const step=[2,5,10][Math.floor(Math.random()*3)]; const start=step*(1+Math.floor(Math.random()*5)); return { prompt:`${start}, ${start+step}, ${start+step*2}, ?`, answer:(start+step*3) }; }
     let q;
     if(level === 1) q = mkAdd(10);
     else if(level === 2) q = mkSub(10);
     else if(level === 3) q = mkAdd(50);
     else if(level === 4) q = Math.random()<0.5 ? mkSub(50) : mkSkip();
     else q = Math.random()<0.5 ? mkAdd(100) : mkSub(100);
-
-    const correct = q.answer;
-    let wrongOpts = new Set();
-    while(wrongOpts.size < 3){
-      let delta = (1+Math.floor(Math.random()*5)) * (Math.random()<0.5?-1:1);
-      let w = correct + delta;
-      if(w >= 0 && w !== correct) wrongOpts.add(w);
+    return q;
+  }
+  function buildMathItems(level, count){
+    const seen = new Set();
+    const items = [];
+    let guard = 0;
+    while(items.length < count && guard < count*20){
+      guard++;
+      const q = genMathOne(level);
+      if(seen.has(q.prompt)) continue;
+      seen.add(q.prompt);
+      const correct = q.answer;
+      let wrongOpts = new Set();
+      while(wrongOpts.size < 3){
+        let delta = (1+Math.floor(Math.random()*5)) * (Math.random()<0.5?-1:1);
+        let w = correct + delta;
+        if(w >= 0 && w !== correct) wrongOpts.add(w);
+      }
+      let opts = [correct, ...wrongOpts].sort(()=>Math.random()-0.5);
+      items.push({ subject:"math", prompt:q.prompt, speak:null, options:opts.map(String), answer:String(correct) });
     }
-    let opts = [correct, ...wrongOpts].sort(()=>Math.random()-0.5);
-    return { subject:"math", prompt:q.prompt, speak:null, options:opts.map(String), answer:String(correct) };
+    return items;
   }
 
   function buildTodaySet(){
-    const items = [];
-    for(let i=0;i<5;i++) items.push(genEnglish(state.level.en));
-    for(let i=0;i<5;i++) items.push(genMath(state.level.math));
-    const en = items.slice(0,5), math = items.slice(5);
+    const en = buildEnglishItems(state.level.en, 5);
+    const math = buildMathItems(state.level.math, 5);
     const mixed = [];
     for(let i=0;i<5;i++){ mixed.push(en[i]); mixed.push(math[i]); }
     return mixed;
@@ -379,27 +493,81 @@
   }
 
   /* ================= TTS ================= */
-  let voicesReady = false;
-  if("speechSynthesis" in window){
-    window.speechSynthesis.onvoiceschanged = ()=>{ voicesReady = true; };
+  function speakUtterance(text, lang){
+    return new Promise(resolve=>{
+      if(!text || !("speechSynthesis" in window)){ resolve(false); return; }
+      try{
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = lang || "en-US";
+        u.rate = 0.85;
+        let settled = false;
+        u.onstart = ()=>{ if(!settled){ settled=true; resolve(true); } };
+        u.onerror = ()=>{ if(!settled){ settled=true; resolve(false); } };
+        window.speechSynthesis.speak(u);
+        setTimeout(()=>{ if(!settled){ settled=true; resolve(false); } }, 800);
+      }catch(e){ resolve(false); }
+    });
   }
-  function speak(text, lang){
-    if(!text || !("speechSynthesis" in window)) return;
-    try{
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = lang || "en-US";
-      u.rate = 0.85;
-      window.speechSynthesis.speak(u);
-    }catch(e){}
+  function speak(text, lang){ speakUtterance(text, lang); }
+
+  let greetingPlayed = false;
+  async function tryGreeting(){
+    if(greetingPlayed) return;
+    const ok = await speakUtterance(t("greeting"), state.lang==="zh"?"zh-CN":"en-US");
+    if(ok) greetingPlayed = true;
   }
-  function playGreeting(){
-    if(!("speechSynthesis" in window)) return;
-    const msg = t("greeting");
-    const lang = state.lang === "zh" ? "zh-CN" : "en-US";
-    const attempt = ()=>speak(msg, lang);
-    if(window.speechSynthesis.getVoices().length || voicesReady) attempt();
-    else setTimeout(attempt, 300);
+  function gestureFallback(){
+    if(greetingPlayed){
+      document.removeEventListener("click", gestureFallback);
+      document.removeEventListener("touchend", gestureFallback);
+      return;
+    }
+    tryGreeting();
+  }
+
+  /* ================= Sound effects (Web Audio, no external assets) ================= */
+  let audioCtx = null;
+  function getCtx(){
+    if(!audioCtx){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if(AC) audioCtx = new AC();
+    }
+    if(audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+  function beep(freq, duration, type, vol){
+    const ctx = getCtx();
+    if(!ctx) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type || "sine";
+    osc.frequency.value = freq;
+    gain.gain.value = vol==null?0.12:vol;
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+    osc.stop(ctx.currentTime + duration);
+  }
+  function sfxClick(){ beep(500, 0.06, "square", 0.06); }
+  function sfxCorrect(){ beep(880,0.12,"sine",0.13); setTimeout(()=>beep(1175,0.15,"sine",0.13), 90); }
+  function sfxWrong(){ beep(170,0.28,"sawtooth",0.10); }
+  function sfxCelebrate(){ [660,880,1046,1318].forEach((f,i)=>setTimeout(()=>beep(f,0.18,"sine",0.14), i*120)); }
+
+  /* ================= Confetti ================= */
+  const confettiLayer = document.getElementById("confettiLayer");
+  function spawnConfetti(){
+    const colors = ["#F2C14E","#4FD8E8","#5B8C3A","#8B5A2B","#D9534F"];
+    for(let i=0;i<28;i++){
+      const el = document.createElement("div");
+      el.className = "confetti-piece";
+      el.style.left = Math.random()*100 + "%";
+      el.style.background = colors[Math.floor(Math.random()*colors.length)];
+      el.style.animationDelay = (Math.random()*0.4) + "s";
+      el.style.animationDuration = (1.1 + Math.random()*0.9) + "s";
+      confettiLayer.appendChild(el);
+    }
+    setTimeout(()=>{ confettiLayer.innerHTML = ""; }, 2600);
   }
 
   /* ================= Timer ================= */
@@ -410,10 +578,7 @@
     const live = sessionStartTs ? Math.floor((Date.now()-sessionStartTs)/1000) : 0;
     return base + live;
   }
-  function fmtTime(sec){
-    const m = Math.floor(sec/60), s = sec%60;
-    return `${pad2(m)}:${pad2(s)}`;
-  }
+  function fmtTime(sec){ const m=Math.floor(sec/60), s=sec%60; return `${pad2(m)}:${pad2(s)}`; }
   function fmtClock(ms){
     if(!ms) return "--:--";
     const d = new Date(ms);
@@ -446,11 +611,7 @@
     if(correct >= Math.ceil(total*0.5)) return 1;
     return 0;
   }
-  function starsHtml(n){
-    let s = "";
-    for(let i=0;i<3;i++) s += i<n ? "⭐" : "☆";
-    return s;
-  }
+  function starsHtml(n){ let s=""; for(let i=0;i<3;i++) s += i<n ? "⭐" : "☆"; return s; }
 
   /* ================= DOM refs ================= */
   const homeCard = document.getElementById("homeCard");
@@ -468,6 +629,13 @@
   const calMonthLabel = document.getElementById("calMonthLabel");
   const calPrev = document.getElementById("calPrev");
   const calNext = document.getElementById("calNext");
+  const settingsBtn = document.getElementById("settingsBtn");
+  const settingsModal = document.getElementById("settingsModal");
+  const closeSettings = document.getElementById("closeSettings");
+  const settingsTitle = document.getElementById("settingsTitle");
+  const langRowLabel = document.getElementById("langRowLabel");
+  const versionRow = document.getElementById("versionRow");
+  const moreRow = document.getElementById("moreRow");
 
   const LOOT_ICONS = ["💎","💎","🥇","💎","🥇","💎","💎","🥇","💎","🏆"];
 
@@ -482,6 +650,9 @@
   function showQuiz(){ view = "quiz"; startTimer(); render(); }
 
   backBtn.addEventListener("click", goHome);
+  settingsBtn.addEventListener("click", ()=> settingsModal.classList.add("show"));
+  closeSettings.addEventListener("click", ()=> settingsModal.classList.remove("show"));
+  settingsModal.addEventListener("click", (e)=>{ if(e.target===settingsModal) settingsModal.classList.remove("show"); });
 
   langToggle.addEventListener("click", ()=>{
     state.lang = state.lang === "en" ? "zh" : "en";
@@ -502,9 +673,13 @@
 
   function render(){
     appTitleEl.innerHTML = t("appTitle") + (t("appSub") ? "<br>"+t("appSub") : "");
-    langToggle.textContent = t("langBtn");
     footerNote.textContent = t("footerNote")(VERSION);
     backBtn.textContent = t("back");
+    settingsTitle.textContent = t("settingsTitle");
+    langRowLabel.textContent = t("langRowLabel");
+    langToggle.textContent = t("langBtn");
+    versionRow.textContent = VERSION;
+    moreRow.textContent = t("moreRow");
 
     const isOverlay = (view === "quiz" || view === "review" || view === "done");
     pageOverlay.classList.toggle("show", isOverlay);
@@ -741,6 +916,7 @@
   }
 
   function handleAnswer(q, chosen, btnEl, rowEl){
+    sfxClick();
     const correct = (String(chosen) === String(q.answer));
     Array.from(rowEl.children).forEach(b=>b.disabled = true);
     btnEl.classList.add(correct?"correct":"wrong");
@@ -749,6 +925,8 @@
         if(String(b.textContent)===String(q.answer)) b.classList.add("correct");
       });
     }
+    if(correct) sfxCorrect(); else sfxWrong();
+
     const fb = document.getElementById("feedback");
     fb.textContent = correct ? t("correctFb") : t("wrongFb");
     fb.className = "feedback " + (correct?"good":"bad");
@@ -779,17 +957,21 @@
       <div class="done">
         <div class="big">⛺</div>
         <h2>${t("doneTitle")}</h2>
-        <div class="stars-line">${starsHtml(stars)}</div>
+        <div class="stars-line pop">${starsHtml(stars)}</div>
         <p>${t("doneScore")(correctCount, total)}<br>${t("timeSpent")(fmtTime(state.today.timeSpent||0))}<br>${t("completedAt")(fmtClock(completedAt))}</p>
         ${badgeBanner}
       </div>
     `;
     justEarnedBadges = [];
+    spawnConfetti();
+    sfxCelebrate();
   }
 
   /* ================= Init ================= */
   render();
-  playGreeting();
+  tryGreeting();
+  document.addEventListener("click", gestureFallback);
+  document.addEventListener("touchend", gestureFallback);
   window.__resetCamp = function(){ localStorage.removeItem(STORE_KEY); location.reload(); };
 })();
 </script>
