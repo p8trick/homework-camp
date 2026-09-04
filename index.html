@@ -266,7 +266,7 @@
     <div class="card" id="homeCard"></div>
   </div>
 
-  <footer id="footerNote">v1.9.0 · Saved on this device only · phone sync not set up yet</footer>
+  <footer id="footerNote">v2.0.0 · Saved on this device only · phone sync not set up yet</footer>
 </div>
 
 <div id="pageOverlay">
@@ -289,11 +289,73 @@
       <span id="langRowLabel">Language</span>
       <button id="langToggle">中文</button>
     </div>
+    <div class="settings-row">
+      <span id="syncRowLabel">Sync code</span>
+      <input type="text" id="syncInput" maxlength="12" placeholder="e.g. camp-482x" style="width:150px;">
+    </div>
+    <div class="settings-row muted" id="syncStatusRow"></div>
     <div class="settings-row muted" id="versionRow"></div>
     <div class="settings-row muted" id="moreRow"></div>
     <button class="modal-close" id="closeSettings">Close</button>
   </div>
 </div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+  import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDFnnLxYvmW-_E9h3T_jPDoZhi7aqOLkJQ",
+    authDomain: "homework-471fb.firebaseapp.com",
+    projectId: "homework-471fb",
+    storageBucket: "homework-471fb.firebasestorage.app",
+    messagingSenderId: "40029482214",
+    appId: "1:40029482214:web:57de9642cd5102234bdf27"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  let authReadyResolve;
+  const authReady = new Promise(res => { authReadyResolve = res; });
+  onAuthStateChanged(auth, user => { if(user) authReadyResolve(); });
+  signInAnonymously(auth).catch(err => console.warn("Anonymous sign-in failed:", err));
+
+  let unsubscribe = null;
+
+  window.CampSync = {
+    // Push this device's local days/meta up to the cloud doc for this pairing code.
+    async push(pairCode, payload){
+      if(!pairCode) return;
+      await authReady;
+      try{
+        await setDoc(doc(db, "camps", pairCode), payload, { merge: true });
+      }catch(e){ console.warn("CampSync.push failed:", e); }
+    },
+    // One-time fetch (used right after entering a pairing code, to pull existing history).
+    async pull(pairCode){
+      if(!pairCode) return null;
+      await authReady;
+      try{
+        const snap = await getDoc(doc(db, "camps", pairCode));
+        return snap.exists() ? snap.data() : null;
+      }catch(e){ console.warn("CampSync.pull failed:", e); return null; }
+    },
+    // Live subscription: fires immediately with current data, then again on every change.
+    subscribe(pairCode, cb){
+      if(unsubscribe){ unsubscribe(); unsubscribe = null; }
+      if(!pairCode) return;
+      authReady.then(()=>{
+        unsubscribe = onSnapshot(doc(db, "camps", pairCode), snap=>{
+          cb(snap.exists() ? snap.data() : null);
+        }, err => console.warn("CampSync.subscribe error:", err));
+      });
+    }
+  };
+  window.dispatchEvent(new Event("campsync-ready"));
+</script>
 
 <script>
 (function(){
@@ -327,10 +389,13 @@
       weekdays:["S","M","T","W","T","F","S"],
       months:["January","February","March","April","May","June","July","August","September","October","November","December"],
       settingsTitle:"Settings", nameRowLabel:"Name", langRowLabel:"Language", langBtn:"中文", moreRow:"More options coming soon",
-      footerNote:v=>`${v} · Saved on this device only · phone sync not set up yet`,
+      syncRowLabel:"Sync code", syncStatus:s=> s==="on"?"Synced ✓": s==="connecting"?"Connecting…": s==="error"?"Sync error": "Not synced — set the same code on both devices",
+      footerNote:v=> state.pairCode ? `${v} · Synced with pairing code "${state.pairCode}"` : `${v} · Saved on this device only · set a sync code in Settings to share progress`,
       greeting:name => name ? `Welcome back, ${name}!` : "Welcome back!",
       newBadge:label=>`🎉 New badge unlocked: ${label}!`,
-      badgeLabel:m=>`${m}-Day Streak`
+      badgeLabel:m=>`${m}-Day Streak`,
+      reactionBanner:(date,emoji)=>`${emoji} Dad cheered for your ${date} practice!`,
+      reactionRowLabel:"Send a reaction for this day"
     },
     zh: {
       appTitle:"每日营地", appSub:"DAILY CAMP",
@@ -353,13 +418,16 @@
       weekdays:["日","一","二","三","四","五","六"],
       months:["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],
       settingsTitle:"设置", nameRowLabel:"名字", langRowLabel:"界面语言", langBtn:"EN", moreRow:"更多设置，敬请期待",
-      footerNote:v=>`${v} · 仅保存在本机 · 手机同步尚未开启`,
+      syncRowLabel:"同步配对码", syncStatus:s=> s==="on"?"已同步 ✓": s==="connecting"?"连接中…": s==="error"?"同步出错": "未同步 — 两台设备填一样的码",
+      footerNote:v=> state.pairCode ? `${v} · 已用配对码「${state.pairCode}」同步` : `${v} · 仅保存在本机 · 去设置里填配对码可开启同步`,
       greeting:name => name ? `欢迎回来${name}` : "欢迎回来",
       newBadge:label=>`🎉 解锁新徽章：${label}！`,
-      badgeLabel:m=>`连胜 ${m} 天`
+      badgeLabel:m=>`连胜 ${m} 天`,
+      reactionBanner:(date,emoji)=>`${emoji} 爸爸给 ${date} 的练习点赞啦！`,
+      reactionRowLabel:"给这一天留个反应"
     }
   };
-  const VERSION = "v1.9.0";
+  const VERSION = "v2.0.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -375,7 +443,8 @@
       raw = {
         lang:"en", userName:"", level:{ en:1, math:1 }, streak:0, bestStreak:0, badges:[],
         lastCompleteDate:null, history:{}, usedLog:{ en:[] },
-        today:{ date:null, items:[], answers:[], timeSpent:0 }
+        today:{ date:null, items:[], answers:[], timeSpent:0 },
+        pairCode:"", reactions:{}, seenReactionKeys:[]
       };
     }
     if(!raw.lang) raw.lang = "en";
@@ -385,6 +454,9 @@
     if(!raw.usedLog) raw.usedLog = { en: [] };
     if(!raw.usedLog.en) raw.usedLog.en = [];
     if(raw.today.timeSpent == null) raw.today.timeSpent = 0;
+    if(raw.pairCode == null) raw.pairCode = "";
+    if(!raw.reactions) raw.reactions = {};
+    if(!raw.seenReactionKeys) raw.seenReactionKeys = [];
     return raw;
   }
   function saveState(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
@@ -674,6 +746,65 @@
   }
   function starsHtml(n){ let s=""; for(let i=0;i<3;i++) s += i<n ? "⭐" : "☆"; return s; }
 
+  /* ================= Cloud sync (via window.CampSync, see the module script above) ================= */
+  const REACTION_EMOJIS = ["👍","🌟","🎉","❤️"];
+  let syncStatus = "off"; // 'off' | 'connecting' | 'on' | 'error'
+
+  function cloudPayloadFromLocal(){
+    return { days: state.history, meta: { streak: state.streak, bestStreak: state.bestStreak, badges: state.badges } };
+  }
+  function mergeCloudIntoLocal(cloud){
+    if(!cloud) return;
+    if(cloud.days){
+      Object.keys(cloud.days).forEach(k=>{
+        const remote = cloud.days[k];
+        if(!state.history[k]){
+          state.history[k] = remote; // remote has a day we don't have locally: adopt it
+        } else if(remote && remote.reaction && !state.history[k].reaction){
+          state.history[k].reaction = remote.reaction; // a reaction can arrive from the other device
+        }
+      });
+    }
+    if(cloud.meta){
+      if((cloud.meta.bestStreak||0) > state.bestStreak) state.bestStreak = cloud.meta.bestStreak;
+    }
+    saveState(state);
+  }
+  function pushToCloud(){
+    if(!state.pairCode || !window.CampSync) return;
+    window.CampSync.push(state.pairCode, cloudPayloadFromLocal());
+  }
+  function setSyncStatus(s){
+    syncStatus = s;
+    const row = document.getElementById("syncStatusRow");
+    if(row) row.textContent = t("syncStatus")(syncStatus);
+  }
+  function connectSync(pairCode){
+    if(!window.CampSync){ return; }
+    if(!pairCode){ setSyncStatus("off"); return; }
+    setSyncStatus("connecting");
+    window.CampSync.subscribe(pairCode, (cloud)=>{
+      setSyncStatus("on");
+      mergeCloudIntoLocal(cloud);
+      checkForNewReaction();
+      if(view === "home") renderHome();
+      if(view === "review") renderReview(reviewKey);
+    });
+  }
+  function checkForNewReaction(){
+    // Show a banner for the most recent completed day if it has a reaction we haven't shown yet.
+    const dates = Object.keys(state.history).sort().reverse();
+    for(const k of dates.slice(0,3)){
+      const rec = state.history[k];
+      if(rec && rec.reaction && !state.seenReactionKeys.includes(k+":"+rec.reaction.emoji)){
+        pendingReactionBanner = { date:k, emoji:rec.reaction.emoji };
+        return;
+      }
+    }
+    pendingReactionBanner = null;
+  }
+  let pendingReactionBanner = null;
+
   /* ================= DOM refs ================= */
   const homeCard = document.getElementById("homeCard");
   const overlayCard = document.getElementById("overlayCard");
@@ -697,6 +828,8 @@
   const langRowLabel = document.getElementById("langRowLabel");
   const nameRowLabel = document.getElementById("nameRowLabel");
   const nameInput = document.getElementById("nameInput");
+  const syncRowLabel = document.getElementById("syncRowLabel");
+  const syncInput = document.getElementById("syncInput");
   const versionRow = document.getElementById("versionRow");
   const moreRow = document.getElementById("moreRow");
 
@@ -715,6 +848,7 @@
   backBtn.addEventListener("click", goHome);
   settingsBtn.addEventListener("click", ()=>{
     nameInput.value = state.userName;
+    syncInput.value = state.pairCode;
     settingsModal.classList.add("show");
   });
   closeSettings.addEventListener("click", ()=> settingsModal.classList.remove("show"));
@@ -722,6 +856,21 @@
   nameInput.addEventListener("input", ()=>{
     state.userName = nameInput.value.slice(0,20);
     saveState(state);
+  });
+  syncInput.addEventListener("change", ()=>{
+    const code = syncInput.value.trim().toLowerCase().slice(0,12);
+    state.pairCode = code;
+    saveState(state);
+    if(code){
+      window.CampSync && window.CampSync.pull(code).then(cloud=>{
+        mergeCloudIntoLocal(cloud);
+        pushToCloud();
+        connectSync(code);
+        render();
+      });
+    } else {
+      setSyncStatus("off");
+    }
   });
 
   langToggle.addEventListener("click", ()=>{
@@ -750,6 +899,8 @@
     nameInput.placeholder = state.lang==="zh" ? "例如：乔治" : "e.g. Alex";
     langRowLabel.textContent = t("langRowLabel");
     langToggle.textContent = t("langBtn");
+    syncRowLabel.textContent = t("syncRowLabel");
+    document.getElementById("syncStatusRow").textContent = t("syncStatus")(syncStatus);
     versionRow.textContent = VERSION;
     moreRow.textContent = t("moreRow");
 
@@ -851,8 +1002,13 @@
       return `<div class="badge-chip ${earned?'':'locked'}" title="${t('badgeLabel')(m)}">${BADGE_ICON[m]}</div>`;
     }).join("");
 
+    const banner = pendingReactionBanner
+      ? `<div class="badge-banner" id="reactionBanner">${t("reactionBanner")(pendingReactionBanner.date, pendingReactionBanner.emoji)}</div>`
+      : "";
+
     homeCard.innerHTML = `
       <div class="home">
+        ${banner}
         <div class="streak-big">${t("streak")(state.streak)}</div>
         <div class="best-streak">${t("bestStreak")(state.bestStreak)}</div>
         <div class="badge-row">${badgeRow}</div>
@@ -862,6 +1018,16 @@
       </div>
     `;
     document.getElementById("startBtn").addEventListener("click", onClick);
+    const reactionBannerEl = document.getElementById("reactionBanner");
+    if(reactionBannerEl && pendingReactionBanner){
+      const seenKey = pendingReactionBanner.date + ":" + pendingReactionBanner.emoji;
+      reactionBannerEl.addEventListener("click", ()=>{
+        state.seenReactionKeys.push(seenKey);
+        saveState(state);
+        pendingReactionBanner = null;
+        renderHome();
+      });
+    }
     const giveUpBtn = document.getElementById("giveUpBtn");
     if(giveUpBtn){
       giveUpBtn.addEventListener("click", ()=>{
@@ -894,13 +1060,31 @@
           </div>
         </div>`;
     }).join("");
+    const reactionRow = !isTodayLive ? `
+      <div class="review-time">${t("reactionRowLabel")}</div>
+      <div class="badge-row" id="reactionPicker" style="justify-content:flex-start; margin-bottom:14px;">
+        ${REACTION_EMOJIS.map(e=>`<div class="badge-chip react-opt ${record.reaction && record.reaction.emoji===e ? '' : 'locked'}" data-emoji="${e}">${e}</div>`).join("")}
+      </div>` : "";
     overlayCard.innerHTML = `
       <div class="review-summary">${key} · ${t("doneScore")(record.correct, total)}</div>
       <div class="stars-line">${starsHtml(record.stars||0)}</div>
       <div class="review-time">${t("timeSpent")(fmtTime(record.timeSpent||0))}</div>
       <div class="review-time">${t("completedAt")(fmtClock(record.completedAt))}</div>
+      ${reactionRow}
       <div class="review-list">${rows || `<p>${t("noRecord")}</p>`}</div>
     `;
+    const picker = document.getElementById("reactionPicker");
+    if(picker){
+      picker.querySelectorAll(".react-opt").forEach(el=>{
+        el.addEventListener("click", ()=>{
+          const emoji = el.getAttribute("data-emoji");
+          state.history[key].reaction = { emoji, ts: Date.now() };
+          saveState(state);
+          pushToCloud();
+          renderReview(key);
+        });
+      });
+    }
   }
 
   function updateStreakOnComplete(){
@@ -929,6 +1113,7 @@
 
     state.lastCompleteDate = key;
     saveState(state);
+    pushToCloud();
   }
 
   function adjustLevel(subject, wasCorrect){
@@ -1053,7 +1238,11 @@
   }
 
   /* ================= Init ================= */
+  checkForNewReaction();
   render();
+  function bootSyncIfConfigured(){ if(state.pairCode) connectSync(state.pairCode); }
+  if(window.CampSync) bootSyncIfConfigured();
+  else window.addEventListener("campsync-ready", bootSyncIfConfigured, { once:true });
   tryGreeting();
   document.addEventListener("click", gestureFallback);
   document.addEventListener("touchend", gestureFallback);
