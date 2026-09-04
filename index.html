@@ -192,6 +192,11 @@
     font-family:'Baloo 2', sans-serif; font-weight:800; font-size:13px;
     padding:6px 12px; background:var(--diamond); border:2px solid var(--ink); cursor:pointer;
   }
+  .settings-row input{
+    font-family:'Baloo 2', sans-serif; font-weight:700; font-size:13px;
+    padding:6px 8px; border:2px solid var(--ink); background:var(--paper);
+    width:130px; color:var(--ink);
+  }
   .modal-close{
     width:100%; margin-top:14px; padding:10px; font-family:'Baloo 2', sans-serif; font-weight:800;
     background:var(--paper); border:2px solid var(--ink); cursor:pointer;
@@ -261,7 +266,7 @@
     <div class="card" id="homeCard"></div>
   </div>
 
-  <footer id="footerNote">v1.7.0 · Saved on this device only · phone sync not set up yet</footer>
+  <footer id="footerNote">v1.9.0 · Saved on this device only · phone sync not set up yet</footer>
 </div>
 
 <div id="pageOverlay">
@@ -277,6 +282,10 @@
   <div class="modal-card">
     <h3 id="settingsTitle">Settings</h3>
     <div class="settings-row">
+      <span id="nameRowLabel">Name</span>
+      <input type="text" id="nameInput" maxlength="20" placeholder="e.g. Alex">
+    </div>
+    <div class="settings-row">
       <span id="langRowLabel">Language</span>
       <button id="langToggle">中文</button>
     </div>
@@ -291,8 +300,6 @@
   "use strict";
 
   /* ================= Config ================= */
-  const KID_NAME = "George";
-  const KID_NAME_ZH = "乔治";
   const MILESTONES = [3,7,14,30,60,100];
   const BADGE_ICON = {3:"🔥",7:"⛺",14:"🏕️",30:"🏆",60:"💎",100:"👑"};
   const RECENT_DAYS = 25; // words used within this window are avoided when picking new ones
@@ -319,9 +326,9 @@
       noRecord:"No record for this day",
       weekdays:["S","M","T","W","T","F","S"],
       months:["January","February","March","April","May","June","July","August","September","October","November","December"],
-      settingsTitle:"Settings", langRowLabel:"Language", langBtn:"中文", moreRow:"More options coming soon",
+      settingsTitle:"Settings", nameRowLabel:"Name", langRowLabel:"Language", langBtn:"中文", moreRow:"More options coming soon",
       footerNote:v=>`${v} · Saved on this device only · phone sync not set up yet`,
-      greeting:`Welcome back, ${KID_NAME}!`,
+      greeting:name => name ? `Welcome back, ${name}!` : "Welcome back!",
       newBadge:label=>`🎉 New badge unlocked: ${label}!`,
       badgeLabel:m=>`${m}-Day Streak`
     },
@@ -345,14 +352,14 @@
       noRecord:"这天还没有记录哦",
       weekdays:["日","一","二","三","四","五","六"],
       months:["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],
-      settingsTitle:"设置", langRowLabel:"界面语言", langBtn:"EN", moreRow:"更多设置，敬请期待",
+      settingsTitle:"设置", nameRowLabel:"名字", langRowLabel:"界面语言", langBtn:"EN", moreRow:"更多设置，敬请期待",
       footerNote:v=>`${v} · 仅保存在本机 · 手机同步尚未开启`,
-      greeting:`欢迎回来${KID_NAME_ZH}`,
+      greeting:name => name ? `欢迎回来${name}` : "欢迎回来",
       newBadge:label=>`🎉 解锁新徽章：${label}！`,
       badgeLabel:m=>`连胜 ${m} 天`
     }
   };
-  const VERSION = "v1.7.0";
+  const VERSION = "v1.9.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -366,12 +373,13 @@
     try{ raw = JSON.parse(localStorage.getItem(STORE_KEY)); }catch(e){ raw = null; }
     if(!raw){
       raw = {
-        lang:"en", level:{ en:1, math:1 }, streak:0, bestStreak:0, badges:[],
+        lang:"en", userName:"", level:{ en:1, math:1 }, streak:0, bestStreak:0, badges:[],
         lastCompleteDate:null, history:{}, usedLog:{ en:[] },
         today:{ date:null, items:[], answers:[], timeSpent:0 }
       };
     }
     if(!raw.lang) raw.lang = "en";
+    if(raw.userName == null) raw.userName = "";
     if(raw.bestStreak == null) raw.bestStreak = raw.streak||0;
     if(!raw.badges) raw.badges = [];
     if(!raw.usedLog) raw.usedLog = { en: [] };
@@ -426,6 +434,9 @@
     ["They ___ at the park now.","are","is"],["The sun ___ bright today.","is","are"],
     ["My shoes ___ new.","are","is"],["This cake ___ delicious.","is","are"]
   ];
+  // Shared distractor bank for sentence-fill, so each sentence can offer up to 6 choices
+  // instead of just its one hand-authored wrong word.
+  const GRAMMAR_BANK = ["is","are","am","was","were","has","have","do","does","did","goes","go","a","an","my","his","in","on","this","that"];
 
   function recentEnKeys(){
     const cutoff = Date.now() - RECENT_DAYS*24*3600*1000;
@@ -437,36 +448,58 @@
     keys.forEach(k=> state.usedLog.en.push({ ts: Date.now(), key:k }));
   }
 
+  // Difficulty scales two ways as level rises: which content pool is used, AND how many
+  // answer options are offered. Option count is capped per-type by how many honest
+  // distractors actually exist for that type (see poolCapFor).
+  function optionCountFor(level, cap){
+    const target = level<=1 ? 4 : level===2 ? 5 : 6;
+    return Math.min(target, cap);
+  }
+  function poolCapFor(level){
+    if(level<=2) return 6; // sight-word: 44 other emoji available, easily supports 6
+    if(level<=4) return 5; // missing-letter: only 5 vowels exist, honest cap is 5
+    return 6;              // sentence-fill: shared grammar bank supports 6
+  }
+  function buildOptions(correct, wrongCandidates, count){
+    const uniqueWrong = Array.from(new Set(wrongCandidates.filter(w=>w!==correct)));
+    const chosen = uniqueWrong.sort(()=>Math.random()-0.5).slice(0, Math.max(0,count-1));
+    return [correct, ...chosen].sort(()=>Math.random()-0.5);
+  }
+
   function poolForLevel(level){
     if(level<=2) return { pool:SIGHT_WORDS, keyFn:w=>w[0], make:makeSightQuestion };
     if(level<=4) return { pool:MISSING_LETTER, keyFn:w=>w[3], make:makeLetterQuestion };
     return { pool:SENTENCE_FILL, keyFn:w=>w[0], make:makeSentenceQuestion };
   }
-  function makeSightQuestion(row){
+  function makeSightQuestion(row, optCount){
     const [word, emoji] = row;
-    let wrongEmojis = SIGHT_WORDS.filter(w=>w[1]!==emoji).sort(()=>Math.random()-0.5).slice(0,3).map(w=>w[1]);
-    let opts = [emoji, ...wrongEmojis].sort(()=>Math.random()-0.5);
+    const wrongPool = SIGHT_WORDS.filter(w=>w[1]!==emoji).map(w=>w[1]);
+    const opts = buildOptions(emoji, wrongPool, optCount);
     return { subject:"en", prompt: word, speak: word, options: opts, answer: emoji, big:true };
   }
-  function makeLetterQuestion(row){
+  function makeLetterQuestion(row, optCount){
     const [word, right, wrong, full] = row;
-    let opts = [right, wrong].sort(()=>Math.random()-0.5);
+    const vowels = ["a","e","i","o","u"];
+    const wrongPool = Array.from(new Set([wrong, ...vowels.filter(v=>v!==right)]));
+    const opts = buildOptions(right, wrongPool, optCount);
     return { subject:"en", prompt: word, speak: full, options: opts, answer: right };
   }
-  function makeSentenceQuestion(row){
+  function makeSentenceQuestion(row, optCount){
     const [sentence, right, wrong] = row;
-    let opts = [right, wrong].sort(()=>Math.random()-0.5);
+    const wrongPool = Array.from(new Set([wrong, ...GRAMMAR_BANK.filter(w=>w!==right)]));
+    const opts = buildOptions(right, wrongPool, optCount);
     return { subject:"en", prompt: sentence, speak: sentence.replace("___", right), options: opts, answer: right };
   }
 
-  function buildEnglishItems(level, count){
+  function buildEnglishItems(level, qCount){
     const { pool, keyFn, make } = poolForLevel(level);
     const recent = recentEnKeys();
     let avail = pool.filter(row=>!recent.has(keyFn(row)));
-    if(avail.length < count) avail = pool.slice(); // pool exhausted for this window: allow repeats
-    const chosen = avail.sort(()=>Math.random()-0.5).slice(0, count);
+    if(avail.length < qCount) avail = pool.slice(); // pool exhausted for this window: allow repeats
+    const chosen = avail.sort(()=>Math.random()-0.5).slice(0, qCount);
     logEnUsed(chosen.map(keyFn));
-    return chosen.map(make);
+    const optCount = optionCountFor(level, poolCapFor(level));
+    return chosen.map(row=>make(row, optCount));
   }
 
   function genMathOne(level){
@@ -481,19 +514,22 @@
     else q = Math.random()<0.5 ? mkAdd(100) : mkSub(100);
     return q;
   }
-  function buildMathItems(level, count){
+  function buildMathItems(level, qCount){
+    const optCount = optionCountFor(level, 6); // arithmetic distractors are unlimited, no pool cap
     const seen = new Set();
     const items = [];
     let guard = 0;
-    while(items.length < count && guard < count*20){
+    while(items.length < qCount && guard < qCount*20){
       guard++;
       const q = genMathOne(level);
       if(seen.has(q.prompt)) continue;
       seen.add(q.prompt);
       const correct = q.answer;
       let wrongOpts = new Set();
-      while(wrongOpts.size < 3){
-        let delta = (1+Math.floor(Math.random()*5)) * (Math.random()<0.5?-1:1);
+      let tries = 0;
+      while(wrongOpts.size < optCount-1 && tries < 40){
+        tries++;
+        let delta = (1+Math.floor(Math.random()*8)) * (Math.random()<0.5?-1:1);
         let w = correct + delta;
         if(w >= 0 && w !== correct) wrongOpts.add(w);
       }
@@ -539,7 +575,7 @@
   let greetingPlayed = false;
   async function tryGreeting(){
     if(greetingPlayed) return;
-    const ok = await speakUtterance(t("greeting"), state.lang==="zh"?"zh-CN":"en-US");
+    const ok = await speakUtterance(t("greeting")(state.userName.trim()), state.lang==="zh"?"zh-CN":"en-US");
     if(ok) greetingPlayed = true;
   }
   function gestureFallback(){
@@ -659,6 +695,8 @@
   const closeSettings = document.getElementById("closeSettings");
   const settingsTitle = document.getElementById("settingsTitle");
   const langRowLabel = document.getElementById("langRowLabel");
+  const nameRowLabel = document.getElementById("nameRowLabel");
+  const nameInput = document.getElementById("nameInput");
   const versionRow = document.getElementById("versionRow");
   const moreRow = document.getElementById("moreRow");
 
@@ -675,9 +713,16 @@
   function showQuiz(){ view = "quiz"; startTimer(); render(); }
 
   backBtn.addEventListener("click", goHome);
-  settingsBtn.addEventListener("click", ()=> settingsModal.classList.add("show"));
+  settingsBtn.addEventListener("click", ()=>{
+    nameInput.value = state.userName;
+    settingsModal.classList.add("show");
+  });
   closeSettings.addEventListener("click", ()=> settingsModal.classList.remove("show"));
   settingsModal.addEventListener("click", (e)=>{ if(e.target===settingsModal) settingsModal.classList.remove("show"); });
+  nameInput.addEventListener("input", ()=>{
+    state.userName = nameInput.value.slice(0,20);
+    saveState(state);
+  });
 
   langToggle.addEventListener("click", ()=>{
     state.lang = state.lang === "en" ? "zh" : "en";
@@ -701,6 +746,8 @@
     footerNote.textContent = t("footerNote")(VERSION);
     backBtn.textContent = t("back");
     settingsTitle.textContent = t("settingsTitle");
+    nameRowLabel.textContent = t("nameRowLabel");
+    nameInput.placeholder = state.lang==="zh" ? "例如：乔治" : "e.g. Alex";
     langRowLabel.textContent = t("langRowLabel");
     langToggle.textContent = t("langBtn");
     versionRow.textContent = VERSION;
@@ -886,16 +933,25 @@
 
   function adjustLevel(subject, wasCorrect){
     const comboKey = subject+"Combo";
+    const wrongKey = subject+"WrongCombo";
     state.today[comboKey] = state.today[comboKey] || 0;
+    state.today[wrongKey] = state.today[wrongKey] || 0;
     if(wasCorrect){
       state.today[comboKey] += 1;
+      state.today[wrongKey] = 0;
       if(state.today[comboKey] >= 4 && state.level[subject] < 5){
         state.level[subject] += 1;
         state.today[comboKey] = 0;
       }
     } else {
       state.today[comboKey] = 0;
-      if(state.level[subject] > 1) state.level[subject] -= 1;
+      state.today[wrongKey] += 1;
+      // Require 2 wrong in a row (not just 1) before dropping a level — with more
+      // answer options now in play, a single miss is less diagnostic of true difficulty.
+      if(state.today[wrongKey] >= 2 && state.level[subject] > 1){
+        state.level[subject] -= 1;
+        state.today[wrongKey] = 0;
+      }
     }
   }
 
@@ -928,6 +984,10 @@
 
     if(q.speak){
       document.getElementById("speakBtn").addEventListener("click", ()=>speak(q.speak, "en-US"));
+      // Sight-word questions (q.big) are fundamentally a sound-to-picture match, so we
+      // read them aloud automatically. Letter/sentence questions stay manual-only — the
+      // point there is independent reading, so auto-playing would just let him skip that.
+      if(q.big) speak(q.speak, "en-US");
     }
 
     const optionsRow = document.getElementById("optionsRow");
