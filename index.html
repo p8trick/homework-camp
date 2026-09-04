@@ -172,6 +172,18 @@
 
   footer{ margin-top:auto; padding-top:20px; font-size:10px; color:rgba(0,0,0,.35); text-align:center; }
 
+  /* ---------- Test mode banner ---------- */
+  #testBanner{
+    display:none; position:fixed; top:0; left:0; right:0; z-index:500;
+    background:repeating-linear-gradient(45deg, var(--gold), var(--gold) 10px, var(--night) 10px, var(--night) 20px);
+    color:var(--paper); text-align:center; font-weight:800; font-size:11px;
+    padding:5px 6px calc(5px + env(safe-area-inset-top)) 6px; letter-spacing:.3px;
+    text-shadow:1px 1px 0 rgba(0,0,0,.4);
+  }
+  body.test-mode #testBanner{ display:block; }
+  body.test-mode{ padding-top:calc(env(safe-area-inset-top) + 30px) !important; }
+  body.test-mode #pageOverlay{ padding-top:calc(env(safe-area-inset-top) + 30px); }
+
   /* ---------- Settings modal ---------- */
   .modal-backdrop{
     position:fixed; inset:0; z-index:300; background:rgba(0,0,0,.45);
@@ -243,6 +255,7 @@
 </head>
 <body>
 
+<div id="testBanner"></div>
 <div id="confettiLayer"></div>
 
 <div id="homePage">
@@ -294,6 +307,15 @@
       <input type="text" id="syncInput" maxlength="12" placeholder="e.g. camp-482x" style="width:150px;">
     </div>
     <div class="settings-row muted" id="syncStatusRow"></div>
+    <div class="settings-row" id="testModeRow">
+      <span id="testModeLabel">Test Mode</span>
+      <input type="checkbox" id="testModeToggle" style="width:22px;height:22px;">
+    </div>
+    <div class="settings-row muted" id="testModeHint"></div>
+    <div class="settings-row" id="resetTodayRow">
+      <span id="resetTodayLabel">Reset today's progress</span>
+      <button id="resetTodayBtn">↺</button>
+    </div>
     <div class="settings-row muted" id="versionRow"></div>
     <div class="settings-row muted" id="moreRow"></div>
     <button class="modal-close" id="closeSettings">Close</button>
@@ -395,7 +417,12 @@
       newBadge:label=>`🎉 New badge unlocked: ${label}!`,
       badgeLabel:m=>`${m}-Day Streak`,
       reactionBanner:(date,emoji)=>`${emoji} Dad cheered for your ${date} practice!`,
-      reactionRowLabel:"Send a reaction for this day"
+      reactionRowLabel:"Send a reaction for this day",
+      testModeLabel:"Test Mode", testModeHint:"Separate local practice data, cloud sync fully off — nothing here can reach real synced progress",
+      testBannerText:"🧪 TEST MODE — practice data, not synced with real progress",
+      testModeOnConfirm:"Switch to Test Mode? This reloads the app into a separate, isolated practice profile.",
+      testModeOffConfirm:"Switch back to the real profile? This reloads the app.",
+      resetTodayLabel:"Reset today's progress", resetTodayConfirm:"This clears today's completed practice (in this profile) and generates a fresh set. Use this to undo an accidental completion. Continue?"
     },
     zh: {
       appTitle:"每日营地", appSub:"DAILY CAMP",
@@ -424,14 +451,27 @@
       newBadge:label=>`🎉 解锁新徽章：${label}！`,
       badgeLabel:m=>`连胜 ${m} 天`,
       reactionBanner:(date,emoji)=>`${emoji} 爸爸给 ${date} 的练习点赞啦！`,
-      reactionRowLabel:"给这一天留个反应"
+      reactionRowLabel:"给这一天留个反应",
+      testModeLabel:"测试模式", testModeHint:"本地独立测试数据，云同步完全关闭 — 不会影响真实的同步进度",
+      testBannerText:"🧪 测试模式 — 练习数据不会同步到真实进度",
+      testModeOnConfirm:"切换到测试模式？会重新加载页面，进入一份独立、隔离的测试档案。",
+      testModeOffConfirm:"切换回真实档案？会重新加载页面。",
+      resetTodayLabel:"重置今天的进度", resetTodayConfirm:"这会清空当前档案里今天已完成的练习（换一批新题）。用来撤销误操作的完成记录。确定吗？"
     }
   };
-  const VERSION = "v2.0.0";
+  const VERSION = "v2.2.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
-  const STORE_KEY = "campState_v1";
+  // Test Mode is only ever reachable on dad's iPhone (see isDevDevice below) — the son's
+  // iPad never shows the toggle, so it can't be switched on there. When it's on: local data
+  // uses a separate STORE_KEY (so it can't corrupt real history/streak/badges), and all
+  // cloud reads/writes are skipped entirely — test mode never touches Firestore, so it can
+  // never reach the son's iPad no matter what pairing code is typed in.
+  const isDevDevice = /iPhone/i.test(navigator.userAgent);
+  const TEST_MODE_KEY = "campTestMode_v1";
+  const isTestMode = () => isDevDevice && localStorage.getItem(TEST_MODE_KEY) === "1";
+  const STORE_KEY = isTestMode() ? "campState_v1_TEST" : "campState_v1";
   const pad2 = n => String(n).padStart(2,"0");
   const keyOf = d => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
   const todayStr = () => keyOf(new Date());
@@ -771,6 +811,7 @@
     saveState(state);
   }
   function pushToCloud(){
+    if(isTestMode()) return; // test mode is local-only, never touches Firestore
     if(!state.pairCode || !window.CampSync) return;
     window.CampSync.push(state.pairCode, cloudPayloadFromLocal());
   }
@@ -780,6 +821,7 @@
     if(row) row.textContent = t("syncStatus")(syncStatus);
   }
   function connectSync(pairCode){
+    if(isTestMode()){ setSyncStatus("off"); return; } // test mode stays fully offline
     if(!window.CampSync){ return; }
     if(!pairCode){ setSyncStatus("off"); return; }
     setSyncStatus("connecting");
@@ -832,6 +874,18 @@
   const syncInput = document.getElementById("syncInput");
   const versionRow = document.getElementById("versionRow");
   const moreRow = document.getElementById("moreRow");
+  const testBanner = document.getElementById("testBanner");
+  const testModeLabel = document.getElementById("testModeLabel");
+  const testModeHint = document.getElementById("testModeHint");
+  const testModeToggle = document.getElementById("testModeToggle");
+  const resetTodayLabel = document.getElementById("resetTodayLabel");
+  const resetTodayBtn = document.getElementById("resetTodayBtn");
+  if(!isDevDevice){
+    // Not dad's iPhone — the son's iPad should look like a clean, untouchable kid-mode app.
+    document.getElementById("testModeRow").style.display = "none";
+    document.getElementById("testModeHint").style.display = "none";
+    document.getElementById("resetTodayRow").style.display = "none";
+  }
 
   const LOOT_ICONS = ["💎","💎","🥇","💎","🥇","💎","💎","🥇","💎","🏆"];
 
@@ -849,7 +903,23 @@
   settingsBtn.addEventListener("click", ()=>{
     nameInput.value = state.userName;
     syncInput.value = state.pairCode;
+    testModeToggle.checked = isTestMode();
     settingsModal.classList.add("show");
+  });
+  testModeToggle.addEventListener("change", ()=>{
+    const turningOn = testModeToggle.checked;
+    if(!confirm(turningOn ? t("testModeOnConfirm") : t("testModeOffConfirm"))){
+      testModeToggle.checked = !turningOn;
+      return;
+    }
+    localStorage.setItem(TEST_MODE_KEY, turningOn ? "1" : "0");
+    location.reload();
+  });
+  resetTodayBtn.addEventListener("click", ()=>{
+    if(confirm(t("resetTodayConfirm"))){
+      resetTodayProgress();
+      settingsModal.classList.remove("show");
+    }
   });
   closeSettings.addEventListener("click", ()=> settingsModal.classList.remove("show"));
   settingsModal.addEventListener("click", (e)=>{ if(e.target===settingsModal) settingsModal.classList.remove("show"); });
@@ -861,6 +931,7 @@
     const code = syncInput.value.trim().toLowerCase().slice(0,12);
     state.pairCode = code;
     saveState(state);
+    if(isTestMode()){ setSyncStatus("off"); return; } // test mode never calls out to Firestore
     if(code){
       window.CampSync && window.CampSync.pull(code).then(cloud=>{
         mergeCloudIntoLocal(cloud);
@@ -895,6 +966,11 @@
     footerNote.textContent = t("footerNote")(VERSION);
     backBtn.textContent = t("back");
     settingsTitle.textContent = t("settingsTitle");
+    testModeLabel.textContent = t("testModeLabel");
+    testModeHint.textContent = t("testModeHint");
+    resetTodayLabel.textContent = t("resetTodayLabel");
+    testBanner.textContent = t("testBannerText");
+    document.body.classList.toggle("test-mode", isTestMode());
     nameRowLabel.textContent = t("nameRowLabel");
     nameInput.placeholder = state.lang==="zh" ? "例如：乔治" : "e.g. Alex";
     langRowLabel.textContent = t("langRowLabel");
@@ -1116,6 +1192,33 @@
     pushToCloud();
   }
 
+  // Recomputes streak from scratch by walking backward through history. Used after
+  // resetTodayProgress() removes a (possibly accidental) completion, since the streak
+  // counter itself isn't safe to just decrement — it may have already advanced bestStreak
+  // or unlocked a badge off the bad data.
+  function recomputeStreak(){
+    let d = new Date();
+    const key = todayStr();
+    if(!(state.history[key] && state.history[key].done)) d.setDate(d.getDate()-1);
+    let streak = 0;
+    while(state.history[keyOf(d)] && state.history[keyOf(d)].done){
+      streak++;
+      d.setDate(d.getDate()-1);
+    }
+    state.streak = streak;
+    if(state.streak > state.bestStreak) state.bestStreak = state.streak;
+  }
+
+  function resetTodayProgress(){
+    const key = todayStr();
+    delete state.history[key];
+    state.today = { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent: 0 };
+    recomputeStreak();
+    saveState(state);
+    pushToCloud();
+    goHome();
+  }
+
   function adjustLevel(subject, wasCorrect){
     const comboKey = subject+"Combo";
     const wrongKey = subject+"WrongCombo";
@@ -1247,6 +1350,7 @@
   document.addEventListener("click", gestureFallback);
   document.addEventListener("touchend", gestureFallback);
   window.__resetCamp = function(){ localStorage.removeItem(STORE_KEY); location.reload(); };
+  window.__resetTestData = function(){ localStorage.removeItem("campState_v1_TEST"); location.reload(); };
 })();
 </script>
 
