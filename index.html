@@ -325,7 +325,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
   import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
-  import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteField } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDFnnLxYvmW-_E9h3T_jPDoZhi7aqOLkJQ",
@@ -374,6 +374,22 @@
           cb(snap.exists() ? snap.data() : null);
         }, err => console.warn("CampSync.subscribe error:", err));
       });
+    },
+    // Explicitly remove one day's entry from the cloud doc. setDoc(...,{merge:true}) (used by
+    // push()) can only add or overwrite fields, never delete one — a key missing from the
+    // payload is left untouched in the existing doc. This uses updateDoc + deleteField() for
+    // a real removal, and stamps a resetSignal so other subscribed devices know to drop their
+    // own local copy of this day too (the normal merge-in logic only ever adds days it's
+    // missing locally, it never removes a day already present).
+    async deleteDay(pairCode, dayKey){
+      if(!pairCode) return;
+      await authReady;
+      try{
+        await updateDoc(doc(db, "camps", pairCode), {
+          [`days.${dayKey}`]: deleteField(),
+          resetSignal: { key: dayKey, ts: Date.now() }
+        });
+      }catch(e){ console.warn("CampSync.deleteDay failed:", e); }
     }
   };
   window.dispatchEvent(new Event("campsync-ready"));
@@ -459,7 +475,7 @@
       resetTodayLabel:"重置今天的进度", resetTodayConfirm:"这会清空当前档案里今天已完成的练习（换一批新题）。用来撤销误操作的完成记录。确定吗？"
     }
   };
-  const VERSION = "v2.2.0";
+  const VERSION = "v2.3.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -497,6 +513,7 @@
     if(raw.pairCode == null) raw.pairCode = "";
     if(!raw.reactions) raw.reactions = {};
     if(!raw.seenReactionKeys) raw.seenReactionKeys = [];
+    if(raw.lastAppliedResetTs == null) raw.lastAppliedResetTs = 0;
     return raw;
   }
   function saveState(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
@@ -795,6 +812,19 @@
   }
   function mergeCloudIntoLocal(cloud){
     if(!cloud) return;
+    // A resetSignal means another device explicitly deleted a day (see CampSync.deleteDay).
+    // Apply it before merging cloud.days, and dedupe on ts so it only fires once — otherwise
+    // every later snapshot (e.g. from the son's own progress pushes) would re-fire it and
+    // keep wiping that day's freshly-redone practice.
+    if(cloud.resetSignal && cloud.resetSignal.ts > (state.lastAppliedResetTs||0)){
+      const key = cloud.resetSignal.key;
+      if(state.history[key]) delete state.history[key];
+      if(key === todayStr()){
+        state.today = { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent: 0 };
+      }
+      recomputeStreak();
+      state.lastAppliedResetTs = cloud.resetSignal.ts;
+    }
     if(cloud.days){
       Object.keys(cloud.days).forEach(k=>{
         const remote = cloud.days[k];
@@ -1215,7 +1245,12 @@
     state.today = { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent: 0 };
     recomputeStreak();
     saveState(state);
-    pushToCloud();
+    // Use deleteDay (not pushToCloud/setDoc merge) — merge can only add/overwrite fields,
+    // it can never remove one, which was exactly why the old reset silently failed to stick:
+    // the "completed" entry stayed in the cloud doc and synced right back down.
+    if(!isTestMode() && state.pairCode && window.CampSync){
+      window.CampSync.deleteDay(state.pairCode, key);
+    }
     goHome();
   }
 
