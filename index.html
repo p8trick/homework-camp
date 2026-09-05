@@ -109,6 +109,7 @@
   .opt-btn:active{transform:translate(2px,2px); box-shadow:1px 1px 0 rgba(0,0,0,.25);}
   .opt-btn.correct{background:var(--grass); color:var(--paper); border-color:var(--grass-dark);}
   .opt-btn.wrong{background:var(--danger); color:var(--paper);}
+  .opt-btn.selected{background:var(--diamond); border-color:var(--night);}
   .opt-btn:disabled{opacity:.55;}
 
   .feedback{ text-align:center; min-height:26px; font-weight:800; font-size:15px; margin-top:10px; }
@@ -450,11 +451,14 @@
       badgeLabel:m=>`${m}-Day Streak`,
       reactionBanner:(date,emoji)=>`${emoji} Dad cheered for your ${date} practice!`,
       reactionRowLabel:"Send a reaction for this day",
+      dadReactionLabel:"Dad's reaction:",
       testModeLabel:"Test Mode", testModeHint:"Separate local practice data, cloud sync fully off — nothing here can reach real synced progress",
       testBannerText:"🧪 TEST MODE — practice data, not synced with real progress",
       testModeOnConfirm:"Switch to Test Mode? This reloads the app into a separate, isolated practice profile.",
       testModeOffConfirm:"Switch back to the real profile? This reloads the app.",
       resetTodayLabel:"Reset today's progress", resetTodayConfirm:"This clears today's completed practice (in this profile) and generates a fresh set. Use this to undo an accidental completion. Continue?",
+      listenInstructions:"Tap to listen — pick the one that matches, then confirm",
+      confirmLabel:"Confirm",
       syncConfirmWarningChange:code=>`Change the sync code to "${code}"? This device will stop syncing with the current pairing until reconnected, and won't receive or send updates in between.`,
       syncConfirmWarningClear:"Clear the sync code? This device will fully disconnect from cloud sync — no updates will be sent or received until a code is set again.",
       syncConfirmBtn:n=> n>0 ? `Confirm (${n})` : "Confirm",
@@ -488,18 +492,21 @@
       badgeLabel:m=>`连胜 ${m} 天`,
       reactionBanner:(date,emoji)=>`${emoji} 爸爸给 ${date} 的练习点赞啦！`,
       reactionRowLabel:"给这一天留个反应",
+      dadReactionLabel:"爸爸的反应：",
       testModeLabel:"测试模式", testModeHint:"本地独立测试数据，云同步完全关闭 — 不会影响真实的同步进度",
       testBannerText:"🧪 测试模式 — 练习数据不会同步到真实进度",
       testModeOnConfirm:"切换到测试模式？会重新加载页面，进入一份独立、隔离的测试档案。",
       testModeOffConfirm:"切换回真实档案？会重新加载页面。",
       resetTodayLabel:"重置今天的进度", resetTodayConfirm:"这会清空当前档案里今天已完成的练习（换一批新题）。用来撤销误操作的完成记录。确定吗？",
+      listenInstructions:"点一点听发音——选出跟单词对应的那个，再确认",
+      confirmLabel:"确认",
       syncConfirmWarningChange:code=>`确定要把同步码改成"${code}"吗？这台设备会与当前配对断开，直到重新连接——期间不会收发任何更新。`,
       syncConfirmWarningClear:"确定要清空同步码吗？这台设备会完全停止云同步——在重新设置同步码之前，不会收发任何更新。",
       syncConfirmBtn:n=> n>0 ? `确认 (${n})` : "确认",
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.5.1";
+  const VERSION = "v2.8.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -538,6 +545,15 @@
     if(!raw.reactions) raw.reactions = {};
     if(!raw.seenReactionKeys) raw.seenReactionKeys = [];
     if(raw.lastAppliedResetTs == null) raw.lastAppliedResetTs = 0;
+    if(!raw.levelShiftV3Applied){
+      // v2.8.0 inserted a new tier into both level ladders (math: within-20 becomes level 3;
+      // english: blends/CVCe becomes level 5), pushing what used to be level 3+ up by one.
+      // Shift an existing saved level so a returning player keeps the same actual difficulty
+      // instead of being dropped back into an easier tier under the new numbering.
+      if(raw.level && raw.level.math >= 3) raw.level.math += 1;
+      if(raw.level && raw.level.en >= 5) raw.level.en += 1;
+      raw.levelShiftV3Applied = true;
+    }
     return raw;
   }
   function saveState(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
@@ -591,6 +607,60 @@
   // instead of just its one hand-authored wrong word.
   const GRAMMAR_BANK = ["is","are","am","was","were","has","have","do","does","did","goes","go","a","an","my","his","in","on","this","that"];
 
+  // ---- Consonant blends/digraphs: word has the blend removed, pick which blend completes it.
+  const BLEND_LIST = ["sh","ch","th","wh","bl","cl","fl","gl","pl","sl","br","cr","dr","fr","gr","pr","tr","sp","st","sk","sm","sn","sw"];
+  const BLEND_WORDS = [
+    ["_ip","sh","ship"],["_op","sh","shop"],["_ell","sh","shell"],
+    ["_at","ch","chat"],["_in","ch","chin"],["_eese","ch","cheese"],
+    ["_is","th","this"],["_en","th","then"],["_ick","th","thick"],
+    ["_ale","wh","whale"],["_eel","wh","wheel"],
+    ["_ock","bl","block"],["_ue","bl","blue"],["_ack","bl","black"],
+    ["_ap","cl","clap"],["_own","cl","clown"],
+    ["_ag","fl","flag"],["_ower","fl","flower"],["_oor","fl","floor"],
+    ["_ass","gl","glass"],["_ove","gl","glove"],
+    ["_ay","pl","play"],["_ant","pl","plant"],["_ate","pl","plate"],
+    ["_ed","sl","sled"],["_ide","sl","slide"],
+    ["_ick","br","brick"],["_own","br","brown"],["_idge","br","bridge"],
+    ["_ab","cr","crab"],["_y","cr","cry"],
+    ["_um","dr","drum"],["_ess","dr","dress"],["_ive","dr","drive"],
+    ["_og","fr","frog"],["_uit","fr","fruit"],["_iend","fr","friend"],
+    ["_ape","gr","grape"],["_ass","gr","grass"],
+    ["_ize","pr","prize"],["_int","pr","print"],
+    ["_ee","tr","tree"],["_uck","tr","truck"],["_ain","tr","train"],
+    ["_ider","sp","spider"],["_oon","sp","spoon"],
+    ["_ar","st","star"],["_op","st","stop"],["_one","st","stone"],
+    ["_ate","sk","skate"],["_y","sk","sky"],
+    ["_ile","sm","smile"],["_ell","sm","smell"],
+    ["_ake","sn","snake"],["_ail","sn","snail"],
+    ["_im","sw","swim"],["_ing","sw","swing"]
+  ];
+  // ---- Long-vowel silent-e (CVCe): same [word,right,wrong,full] shape as MISSING_LETTER,
+  // so it reuses makeLetterQuestion as-is — just a harder word list.
+  const CVCE_WORDS = [
+    ["c_ke","a","i","cake"],["b_ke","i","a","bike"],["h_pe","o","a","hope"],
+    ["c_te","u","a","cute"],["r_de","i","a","ride"],["m_de","a","i","made"],
+    ["l_ke","a","i","lake"],["t_me","i","a","time"],["n_te","o","a","note"],
+    ["c_ne","o","a","cone"],["t_pe","a","i","tape"],["r_pe","i","a","ripe"],
+    ["g_te","a","i","gate"],["l_ne","i","a","line"],["h_le","o","a","hole"],
+    ["j_ke","o","a","joke"],["fl_te","u","a","flute"],["sm_le","i","a","smile"],
+    ["st_ne","o","a","stone"],["gl_be","o","a","globe"],["c_ve","a","o","cave"],
+    ["w_ve","a","i","wave"],["p_pe","i","a","pipe"],["r_se","o","a","rose"]
+  ];
+
+  // ---- Listening discrimination: written word shown, options are spoken-only (no text
+  // revealed) near-sound-alike words — child must pick by ear which one matches. Kept to
+  // real, simple words the app already treats as known-level vocabulary.
+  const LISTEN_PAIRS = [
+    ["cat",["cot","cut"]],["hot",["hit","hat","hut"]],["bag",["big","bug"]],
+    ["pin",["pen","pan"]],["bed",["bad","bud"]],["top",["tip","tap"]],
+    ["run",["ran"]],["sit",["set","sat"]],["dog",["dig"]],
+    ["ten",["tan","tin"]],["mop",["map"]],["cup",["cap"]],
+    ["log",["leg"]],["red",["rid","rod"]],["fan",["fin","fun"]],
+    ["net",["nut","not"]],["pot",["pet","pit"]],["ship",["shop"]],
+    ["lid",["led","lad"]],["big",["bag","bug"]]
+  ];
+
+
   function recentEnKeys(){
     const cutoff = Date.now() - RECENT_DAYS*24*3600*1000;
     return new Set(state.usedLog.en.filter(e=>e.ts>=cutoff).map(e=>e.key));
@@ -609,8 +679,9 @@
     return Math.min(target, cap);
   }
   function poolCapFor(level){
-    if(level<=2) return 6; // sight-word: 44 other emoji available, easily supports 6
+    if(level<=2) return 6; // sight-word / listen-discrimination: plenty of distractors available
     if(level<=4) return 5; // missing-letter: only 5 vowels exist, honest cap is 5
+    if(level===5) return 6; // blends (22 in BLEND_LIST) / CVCe (vowel-limited to 5, self-caps regardless)
     return 6;              // sentence-fill: shared grammar bank supports 6
   }
   function buildOptions(correct, wrongCandidates, count){
@@ -620,8 +691,9 @@
   }
 
   function poolForLevel(level){
-    if(level<=2) return { pool:SIGHT_WORDS, keyFn:w=>w[0], make:makeSightQuestion };
+    if(level<=2) return { pool:LV1_POOL, keyFn:it=>it.row[0], make:(it,optCount)=>makeLv1Question(it,optCount) };
     if(level<=4) return { pool:MISSING_LETTER, keyFn:w=>w[3], make:makeLetterQuestion };
+    if(level===5) return { pool:LV5_POOL, keyFn:it=>it.kind==='blend'?it.row[2]:it.row[3], make:(it,optCount)=>makeLv5Question(it,optCount) };
     return { pool:SENTENCE_FILL, keyFn:w=>w[0], make:makeSentenceQuestion };
   }
   function makeSightQuestion(row, optCount){
@@ -630,12 +702,45 @@
     const opts = buildOptions(emoji, wrongPool, optCount);
     return { subject:"en", prompt: word, speak: word, options: opts, answer: emoji, big:true };
   }
+  function makeListenQuestion(row){
+    const [word, distractors] = row;
+    const opts = [word, ...distractors].sort(()=>Math.random()-0.5);
+    // No option cap needed: options are spoken-only buttons ("🔊 1/2/3"), never shown as
+    // text, so there's no reading-difficulty tradeoff the way there is for text options.
+    return { subject:"en", type:"listen", prompt: word, speak: null, options: opts, answer: word };
+  }
+  // Level 1-2 mixes two listening skills: picture-match (existing) and sound discrimination
+  // (new) — both are fundamentally "hear it, don't just read it" skills, so grouping them
+  // keeps the level ladder from growing an extra number for what's really the same tier.
+  const LV1_POOL = [
+    ...SIGHT_WORDS.map(row=>({kind:"sight", row})),
+    ...LISTEN_PAIRS.map(row=>({kind:"listen", row}))
+  ];
+  function makeLv1Question(item, optCount){
+    return item.kind === "sight" ? makeSightQuestion(item.row, optCount) : makeListenQuestion(item.row);
+  }
   function makeLetterQuestion(row, optCount){
     const [word, right, wrong, full] = row;
     const vowels = ["a","e","i","o","u"];
     const wrongPool = Array.from(new Set([wrong, ...vowels.filter(v=>v!==right)]));
     const opts = buildOptions(right, wrongPool, optCount);
     return { subject:"en", prompt: word, speak: full, options: opts, answer: right };
+  }
+  function makeBlendQuestion(row, optCount){
+    const [word, right, full] = row;
+    const wrongPool = BLEND_LIST.filter(b=>b!==right);
+    const opts = buildOptions(right, wrongPool, optCount);
+    return { subject:"en", prompt: word, speak: full, options: opts, answer: right };
+  }
+  // Level 5 mixes consonant blends and long-vowel silent-e words — two different decoding
+  // skills at a similar difficulty, right above CVC (levels 3-4) and below full sentence
+  // grammar (level 6).
+  const LV5_POOL = [
+    ...BLEND_WORDS.map(row=>({kind:"blend", row})),
+    ...CVCE_WORDS.map(row=>({kind:"cvce", row}))
+  ];
+  function makeLv5Question(item, optCount){
+    return item.kind === "blend" ? makeBlendQuestion(item.row, optCount) : makeLetterQuestion(item.row, optCount);
   }
   function makeSentenceQuestion(row, optCount){
     const [sentence, right, wrong] = row;
@@ -659,13 +764,27 @@
     function mkAdd(max){ const a=1+Math.floor(Math.random()*max), b=1+Math.floor(Math.random()*max); return { prompt:`${a} + ${b} = ?`, answer:(a+b) }; }
     function mkSub(max){ let a=1+Math.floor(Math.random()*max), b=1+Math.floor(Math.random()*max); if(b>a)[a,b]=[b,a]; return { prompt:`${a} - ${b} = ?`, answer:(a-b) }; }
     function mkSkip(){ const step=[2,5,10][Math.floor(Math.random()*3)]; const start=step*(1+Math.floor(Math.random()*5)); return { prompt:`${start}, ${start+step}, ${start+step*2}, ?`, answer:(start+step*3) }; }
-    let q;
-    if(level === 1) q = mkAdd(10);
-    else if(level === 2) q = mkSub(10);
-    else if(level === 3) q = mkAdd(50);
-    else if(level === 4) q = Math.random()<0.5 ? mkSub(50) : mkSkip();
-    else q = Math.random()<0.5 ? mkAdd(100) : mkSub(100);
-    return q;
+    // Missing-addend (CCSS 1.OA.4/1.OA.8): "8 + ? = 11" or "? + 3 = 11" — solving for an
+    // unknown term rather than computing a sum, a distinct 1st-grade skill from plain add/sub.
+    function mkMissingAddend(max){
+      const a=1+Math.floor(Math.random()*max), b=1+Math.floor(Math.random()*max), c=a+b;
+      return Math.random()<0.5
+        ? { prompt:`${a} + ? = ${c}`, answer:b }
+        : { prompt:`? + ${b} = ${c}`, answer:a };
+    }
+    // Weighted random pick between a level's mix of question forms.
+    function pick(weighted){
+      const total = weighted.reduce((s,[,w])=>s+w, 0);
+      let r = Math.random()*total;
+      for(const [fn,w] of weighted){ r -= w; if(r < 0) return fn(); }
+      return weighted[weighted.length-1][0]();
+    }
+    if(level === 1) return mkAdd(10);
+    if(level === 2) return pick([[()=>mkSub(10),7],[()=>mkMissingAddend(10),3]]);
+    if(level === 3) return pick([[()=>mkAdd(20),4],[()=>mkSub(20),3],[()=>mkMissingAddend(20),3]]); // within-20 tier (CCSS 1.OA.C.6)
+    if(level === 4) return pick([[()=>mkAdd(50),6],[()=>mkMissingAddend(50),4]]);
+    if(level === 5) return pick([[()=>mkSub(50),4],[()=>mkSkip(),3],[()=>mkMissingAddend(50),3]]);
+    return pick([[()=>mkAdd(100),4],[()=>mkSub(100),3],[()=>mkMissingAddend(100),3]]);
   }
   function buildMathItems(level, qCount){
     const optCount = optionCountFor(level, 6); // arithmetic distractors are unlimited, no pool cap
@@ -701,10 +820,15 @@
   }
 
   /* ================= Day bootstrap ================= */
-  if(state.today.date !== todayStr()){
-    state.today = { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent:0 };
-    saveState(state);
+  function checkDayRollover(){
+    if(state.today.date !== todayStr()){
+      state.today = { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent:0 };
+      saveState(state);
+      return true;
+    }
+    return false;
   }
+  checkDayRollover();
 
   /* ================= TTS ================= */
   function speakUtterance(text, lang){
@@ -1208,7 +1332,10 @@
       reactionBannerEl.addEventListener("click", ()=>{
         state.seenReactionKeys.push(seenKey);
         saveState(state);
-        pendingReactionBanner = null;
+        // Don't just clear the banner — if dad reacted to more than one backlogged day,
+        // there may be another unseen reaction waiting. Re-check so it appears next,
+        // instead of silently dropping every reaction except the single most recent one.
+        checkForNewReaction();
         renderHome();
       });
     }
@@ -1244,11 +1371,20 @@
           </div>
         </div>`;
     }).join("");
-    const reactionRow = !isTodayLive ? `
-      <div class="review-time">${t("reactionRowLabel")}</div>
-      <div class="badge-row" id="reactionPicker" style="justify-content:flex-start; margin-bottom:14px;">
-        ${REACTION_EMOJIS.map(e=>`<div class="badge-chip react-opt ${record.reaction && record.reaction.emoji===e ? '' : 'locked'}" data-emoji="${e}">${e}</div>`).join("")}
-      </div>` : "";
+    // The reaction picker is dad-only: on the son's iPad this must not render as a clickable
+    // control at all, or he could just tap a reaction for himself, defeating the point of dad
+    // reviewing and approving. The son can still see a reaction that's already been given
+    // (read-only), matching the permanent emoji badge on the calendar — he just can't set one.
+    const reactionRow = isTodayLive ? "" : (
+      isDevDevice
+        ? `<div class="review-time">${t("reactionRowLabel")}</div>
+           <div class="badge-row" id="reactionPicker" style="justify-content:flex-start; margin-bottom:14px;">
+             ${REACTION_EMOJIS.map(e=>`<div class="badge-chip react-opt ${record.reaction && record.reaction.emoji===e ? '' : 'locked'}" data-emoji="${e}">${e}</div>`).join("")}
+           </div>`
+        : (record.reaction && record.reaction.emoji
+            ? `<div class="review-time">${t("dadReactionLabel")} <span style="font-size:20px; vertical-align:middle;">${record.reaction.emoji}</span></div>`
+            : "")
+    );
     overlayCard.innerHTML = `
       <div class="review-summary">${key} · ${t("doneScore")(record.correct, total)}</div>
       <div class="stars-line">${starsHtml(record.stars||0)}</div>
@@ -1340,7 +1476,7 @@
     if(wasCorrect){
       state.today[comboKey] += 1;
       state.today[wrongKey] = 0;
-      if(state.today[comboKey] >= 4 && state.level[subject] < 5){
+      if(state.today[comboKey] >= 4 && state.level[subject] < 6){
         state.level[subject] += 1;
         state.today[comboKey] = 0;
       }
@@ -1369,6 +1505,7 @@
 
     startTimer();
     const q = state.today.items[idx];
+    const isListen = q.type === "listen";
     overlayCard.innerHTML = `
       <div class="progress-row">
         <span class="subject-tag ${q.subject==='math'?'math':''}">${q.subject==='math'?t("subjectMath"):t("subjectEn")}</span>
@@ -1377,13 +1514,15 @@
       </div>
       <div class="question-box">
         <div class="qtext ${q.big?'big':''}">${q.prompt}</div>
-        ${q.speak ? `<div class="speak-btn" id="speakBtn">🔊</div>` : ""}
+        ${(q.speak && !isListen) ? `<div class="speak-btn" id="speakBtn">🔊</div>` : ""}
+        ${isListen ? `<div class="review-time">${t("listenInstructions")}</div>` : ""}
       </div>
       <div class="options" id="optionsRow"></div>
+      ${isListen ? `<button class="opt-btn" id="listenConfirmBtn" disabled style="width:100%; margin-top:6px;">${t("confirmLabel")}</button>` : ""}
       <div class="feedback" id="feedback"></div>
     `;
 
-    if(q.speak){
+    if(q.speak && !isListen){
       document.getElementById("speakBtn").addEventListener("click", ()=>speak(q.speak, "en-US"));
       // Sight-word questions (q.big) are fundamentally a sound-to-picture match, so we
       // read them aloud automatically. Letter/sentence questions stay manual-only — the
@@ -1392,23 +1531,55 @@
     }
 
     const optionsRow = document.getElementById("optionsRow");
-    q.options.forEach(opt=>{
-      const btn = document.createElement("button");
-      btn.className = "opt-btn";
-      btn.textContent = opt;
-      btn.addEventListener("click", ()=>handleAnswer(q, opt, btn, optionsRow));
-      optionsRow.appendChild(btn);
-    });
+    if(isListen){
+      // Listening-discrimination: tapping an option only previews its audio (repeatable,
+      // freely re-selectable) — it does NOT submit. A separate Confirm button locks in
+      // whichever option is currently selected, and that's final (no changing after).
+      let selected = null;
+      q.options.forEach((opt,i)=>{
+        const btn = document.createElement("button");
+        btn.className = "opt-btn";
+        btn.textContent = "🔊 " + (i+1);
+        btn.dataset.value = opt;
+        btn.addEventListener("click", ()=>{
+          sfxClick();
+          speak(opt, "en-US");
+          Array.from(optionsRow.children).forEach(b=>b.classList.remove("selected"));
+          btn.classList.add("selected");
+          selected = opt;
+          confirmBtn.disabled = false;
+        });
+        optionsRow.appendChild(btn);
+      });
+      const confirmBtn = document.getElementById("listenConfirmBtn");
+      confirmBtn.addEventListener("click", ()=>{
+        if(selected === null) return;
+        confirmBtn.disabled = true;
+        const chosenBtn = Array.from(optionsRow.children).find(b=>b.dataset.value===selected);
+        handleAnswer(q, selected, chosenBtn, optionsRow);
+      });
+    } else {
+      q.options.forEach(opt=>{
+        const btn = document.createElement("button");
+        btn.className = "opt-btn";
+        btn.textContent = opt;
+        btn.dataset.value = opt;
+        btn.addEventListener("click", ()=>handleAnswer(q, opt, btn, optionsRow));
+        optionsRow.appendChild(btn);
+      });
+    }
   }
 
   function handleAnswer(q, chosen, btnEl, rowEl){
     sfxClick();
     const correct = (String(chosen) === String(q.answer));
     Array.from(rowEl.children).forEach(b=>b.disabled = true);
-    btnEl.classList.add(correct?"correct":"wrong");
+    const confirmBtn = document.getElementById("listenConfirmBtn");
+    if(confirmBtn) confirmBtn.disabled = true;
+    if(btnEl) btnEl.classList.add(correct?"correct":"wrong");
     if(!correct){
       Array.from(rowEl.children).forEach(b=>{
-        if(String(b.textContent)===String(q.answer)) b.classList.add("correct");
+        if(String(b.dataset.value)===String(q.answer)) b.classList.add("correct");
       });
     }
     if(correct) sfxCorrect(); else sfxWrong();
@@ -1464,6 +1635,26 @@
   document.addEventListener("touchend", gestureFallback);
   window.__resetCamp = function(){ localStorage.removeItem(STORE_KEY); location.reload(); };
   window.__resetTestData = function(){ localStorage.removeItem("campState_v1_TEST"); location.reload(); };
+
+  // iOS suspends JS execution (and drops network sockets) when a standalone PWA is
+  // backgrounded, screen-locked, or just left idle — the existing Firestore onSnapshot
+  // listener can be left stale, so a dad's reaction/reset pushed while the son's iPad was
+  // asleep might not show up until he force-quits and reopens. Re-subscribing on every
+  // return to foreground forces an immediate fresh fetch instead of waiting on that.
+  let foregroundRefreshTimer = null;
+  function refreshOnForeground(){
+    if(document.visibilityState && document.visibilityState !== "visible") return;
+    if(foregroundRefreshTimer) return; // debounce: visibilitychange/pageshow/focus can all fire together
+    foregroundRefreshTimer = setTimeout(()=>{ foregroundRefreshTimer = null; }, 400);
+    if(view !== "quiz") checkDayRollover(); // don't yank today's set out from under an in-progress quiz
+    if(!isTestMode() && state.pairCode && window.CampSync){
+      connectSync(state.pairCode); // drops any stale listener, subscribes fresh
+    }
+    render();
+  }
+  document.addEventListener("visibilitychange", refreshOnForeground);
+  window.addEventListener("pageshow", refreshOnForeground);
+  window.addEventListener("focus", refreshOnForeground);
 })();
 </script>
 
