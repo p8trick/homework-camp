@@ -77,6 +77,7 @@
   .cal-cell.done{background:var(--gold); border-color:var(--dirt-dark); cursor:pointer; color:var(--ink);}
   .cal-cell.today{outline:2px dashed var(--night); outline-offset:1px; cursor:pointer; background:var(--diamond);}
   .cal-cell .stardot{position:absolute; bottom:1px; font-size:6px;}
+  .cal-cell .reactiondot{position:absolute; top:-3px; right:-3px; font-size:11px; line-height:1; filter:drop-shadow(0 1px 1px rgba(0,0,0,.3));}
 
   .home-columns{ width:100%; max-width:480px; display:flex; flex-direction:column; }
   .home-columns > .cal-wrap, .home-columns > .card{ margin-bottom:14px; }
@@ -209,6 +210,13 @@
     padding:6px 8px; border:2px solid var(--ink); background:var(--paper);
     width:130px; color:var(--ink);
   }
+  #syncConfirmBox button{
+    font-family:'Baloo 2', sans-serif; font-weight:800; font-size:12px;
+    padding:8px 10px; border:2px solid var(--ink); cursor:pointer; border-radius:8px;
+    background:var(--diamond);
+  }
+  #syncConfirmBox button:disabled{ opacity:.5; cursor:not-allowed; }
+  #syncConfirmBtn{ background:var(--gold); }
   .modal-close{
     width:100%; margin-top:14px; padding:10px; font-family:'Baloo 2', sans-serif; font-weight:800;
     background:var(--paper); border:2px solid var(--ink); cursor:pointer;
@@ -307,6 +315,13 @@
       <input type="text" id="syncInput" maxlength="12" placeholder="e.g. camp-482x" style="width:150px;">
     </div>
     <div class="settings-row muted" id="syncStatusRow"></div>
+    <div id="syncConfirmBox" style="display:none; background:rgba(0,0,0,.06); border-radius:10px; padding:10px; margin:2px 0 10px;">
+      <div id="syncConfirmWarning" style="font-size:12px; font-weight:700; line-height:1.4; margin-bottom:8px;"></div>
+      <div style="display:flex; gap:8px;">
+        <button id="syncConfirmBtn" disabled style="flex:1;"></button>
+        <button id="syncCancelBtn" style="flex:1;"></button>
+      </div>
+    </div>
     <div class="settings-row" id="testModeRow">
       <span id="testModeLabel">Test Mode</span>
       <input type="checkbox" id="testModeToggle" style="width:22px;height:22px;">
@@ -438,7 +453,11 @@
       testBannerText:"🧪 TEST MODE — practice data, not synced with real progress",
       testModeOnConfirm:"Switch to Test Mode? This reloads the app into a separate, isolated practice profile.",
       testModeOffConfirm:"Switch back to the real profile? This reloads the app.",
-      resetTodayLabel:"Reset today's progress", resetTodayConfirm:"This clears today's completed practice (in this profile) and generates a fresh set. Use this to undo an accidental completion. Continue?"
+      resetTodayLabel:"Reset today's progress", resetTodayConfirm:"This clears today's completed practice (in this profile) and generates a fresh set. Use this to undo an accidental completion. Continue?",
+      syncConfirmWarningChange:code=>`Change the sync code to "${code}"? This device will stop syncing with the current pairing until reconnected, and won't receive or send updates in between.`,
+      syncConfirmWarningClear:"Clear the sync code? This device will fully disconnect from cloud sync — no updates will be sent or received until a code is set again.",
+      syncConfirmBtn:n=> n>0 ? `Confirm (${n})` : "Confirm",
+      syncCancelBtn:"Cancel"
     },
     zh: {
       appTitle:"每日营地", appSub:"DAILY CAMP",
@@ -472,10 +491,14 @@
       testBannerText:"🧪 测试模式 — 练习数据不会同步到真实进度",
       testModeOnConfirm:"切换到测试模式？会重新加载页面，进入一份独立、隔离的测试档案。",
       testModeOffConfirm:"切换回真实档案？会重新加载页面。",
-      resetTodayLabel:"重置今天的进度", resetTodayConfirm:"这会清空当前档案里今天已完成的练习（换一批新题）。用来撤销误操作的完成记录。确定吗？"
+      resetTodayLabel:"重置今天的进度", resetTodayConfirm:"这会清空当前档案里今天已完成的练习（换一批新题）。用来撤销误操作的完成记录。确定吗？",
+      syncConfirmWarningChange:code=>`确定要把同步码改成"${code}"吗？这台设备会与当前配对断开，直到重新连接——期间不会收发任何更新。`,
+      syncConfirmWarningClear:"确定要清空同步码吗？这台设备会完全停止云同步——在重新设置同步码之前，不会收发任何更新。",
+      syncConfirmBtn:n=> n>0 ? `确认 (${n})` : "确认",
+      syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.3.0";
+  const VERSION = "v2.4.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -902,6 +925,10 @@
   const nameInput = document.getElementById("nameInput");
   const syncRowLabel = document.getElementById("syncRowLabel");
   const syncInput = document.getElementById("syncInput");
+  const syncConfirmBox = document.getElementById("syncConfirmBox");
+  const syncConfirmWarning = document.getElementById("syncConfirmWarning");
+  const syncConfirmBtn = document.getElementById("syncConfirmBtn");
+  const syncCancelBtn = document.getElementById("syncCancelBtn");
   const versionRow = document.getElementById("versionRow");
   const moreRow = document.getElementById("moreRow");
   const testBanner = document.getElementById("testBanner");
@@ -934,6 +961,7 @@
     nameInput.value = state.userName;
     syncInput.value = state.pairCode;
     testModeToggle.checked = isTestMode();
+    hideSyncConfirm();
     settingsModal.classList.add("show");
   });
   testModeToggle.addEventListener("change", ()=>{
@@ -951,16 +979,64 @@
       settingsModal.classList.remove("show");
     }
   });
-  closeSettings.addEventListener("click", ()=> settingsModal.classList.remove("show"));
-  settingsModal.addEventListener("click", (e)=>{ if(e.target===settingsModal) settingsModal.classList.remove("show"); });
+  closeSettings.addEventListener("click", ()=>{ hideSyncConfirm(); settingsModal.classList.remove("show"); });
+  settingsModal.addEventListener("click", (e)=>{ if(e.target===settingsModal){ hideSyncConfirm(); settingsModal.classList.remove("show"); } });
   nameInput.addEventListener("input", ()=>{
     state.userName = nameInput.value.slice(0,20);
     saveState(state);
   });
   syncInput.addEventListener("change", ()=>{
-    const code = syncInput.value.trim().toLowerCase().slice(0,12);
+    const newCode = syncInput.value.trim().toLowerCase().slice(0,12);
+    // Never apply a pairing-code change immediately: show a warning + 5-second countdown
+    // first, since this disconnects the device from whatever it was synced to. The input
+    // itself reverts to the current code until the change is actually confirmed, so it never
+    // looks like the switch already happened.
+    syncInput.value = state.pairCode;
+    if(newCode === state.pairCode) return;
+    openSyncConfirm(newCode);
+  });
+
+  let syncConfirmTimer = null;
+  let syncConfirmSeconds = 0;
+  let pendingSyncCode = null;
+
+  function openSyncConfirm(newCode){
+    pendingSyncCode = newCode;
+    syncConfirmWarning.textContent = newCode ? t("syncConfirmWarningChange")(newCode) : t("syncConfirmWarningClear");
+    syncConfirmSeconds = 5;
+    syncConfirmBtn.disabled = true;
+    syncConfirmBtn.textContent = t("syncConfirmBtn")(syncConfirmSeconds);
+    syncCancelBtn.textContent = t("syncCancelBtn");
+    syncConfirmBox.style.display = "block";
+    if(syncConfirmTimer) clearInterval(syncConfirmTimer);
+    syncConfirmTimer = setInterval(()=>{
+      syncConfirmSeconds--;
+      if(syncConfirmSeconds <= 0){
+        clearInterval(syncConfirmTimer);
+        syncConfirmTimer = null;
+        syncConfirmBtn.disabled = false;
+        syncConfirmBtn.textContent = t("syncConfirmBtn")(0);
+      } else {
+        syncConfirmBtn.textContent = t("syncConfirmBtn")(syncConfirmSeconds);
+      }
+    }, 1000);
+  }
+  function hideSyncConfirm(){
+    if(syncConfirmTimer){ clearInterval(syncConfirmTimer); syncConfirmTimer = null; }
+    syncConfirmBox.style.display = "none";
+    pendingSyncCode = null;
+  }
+  syncCancelBtn.addEventListener("click", ()=>{
+    syncInput.value = state.pairCode;
+    hideSyncConfirm();
+  });
+  syncConfirmBtn.addEventListener("click", ()=>{
+    if(syncConfirmBtn.disabled) return; // countdown not finished yet
+    const code = pendingSyncCode;
+    hideSyncConfirm();
     state.pairCode = code;
     saveState(state);
+    syncInput.value = code;
     if(isTestMode()){ setSyncStatus("off"); return; } // test mode never calls out to Firestore
     if(code){
       window.CampSync && window.CampSync.pull(code).then(cloud=>{
@@ -1056,6 +1132,7 @@
       } else if(record && record.done){
         cls += " done";
         inner += `<span class="stardot">${"⭐".repeat(record.stars||0)}</span>`;
+        if(record.reaction && record.reaction.emoji) inner += `<span class="reactiondot">${record.reaction.emoji}</span>`;
         cell.addEventListener("click", ()=>{ reviewKey = key; view = "review"; render(); });
       } else if(isToday){
         cls += " today";
