@@ -110,6 +110,7 @@
   .opt-btn.correct{background:var(--grass); color:var(--paper); border-color:var(--grass-dark);}
   .opt-btn.wrong{background:var(--danger); color:var(--paper);}
   .opt-btn.selected{background:var(--diamond); border-color:var(--night);}
+  .confirm-btn{width:100%; margin-top:6px;}
   .opt-btn:disabled{opacity:.55;}
 
   .feedback{ text-align:center; min-height:26px; font-weight:800; font-size:15px; margin-top:10px; }
@@ -242,24 +243,91 @@
   .done .big{ animation:pop-in .5s ease-out; }
   .stars-line.pop{ animation:pop-in .5s ease-out .15s both; }
 
-  /* ================= iPad / landscape / wide-screen layout ================= */
-  @media (min-width:780px){
-    .header-row, .home-columns{ max-width:920px; }
-    .home-columns{ flex-direction:row; align-items:flex-start; gap:24px; }
-    .home-columns > .cal-wrap, .home-columns > .card{ max-width:none; flex:1; margin-bottom:0; }
+  /* ================= iPad landscape composition ================= */
+  /* Scoped to landscape orientation only — iPad portrait intentionally falls back to the
+     phone layout above rather than getting its own design (per product decision: the real
+     usage pattern is landscape, so that's the only tablet case worth building for). This is
+     NOT "phone layout × scale" — panel proportions, spacing, and vertical placement are
+     recomputed for a wide short viewport, not just enlarged. */
+  @media (orientation:landscape) and (min-width:980px){
+    /* Pin the header at top (as before) and let the calendar+status row center itself
+       within whatever vertical space is left, instead of centering the whole page as one
+       block — that would drag the header down away from the top edge along with it. */
+    #homePage{ flex:1; display:flex; flex-direction:column; }
+    .home-columns{ margin:auto 0; }
 
-    .solo-card{ max-width:700px; }
-    .backpack{ max-width:700px; }
+    .header-row{ max-width:min(94vw, 1180px); margin-bottom:20px; }
+    header h1{ font-size:18px; }
+    .gear-btn{ width:38px; height:38px; font-size:19px; }
 
-    .qtext{ font-size:34px; }
-    .qtext.big{ font-size:56px; }
-    .options{ gap:16px; }
-    .opt-btn{ font-size:24px; padding:22px 10px; min-height:72px; }
-    .primary-btn{ font-size:22px; padding:22px 10px; }
-    .streak-big{ font-size:44px; }
-    .badge-chip{ width:42px; height:42px; font-size:22px; }
-    .loot{ width:42px; height:42px; font-size:22px; }
-    .cal-cell{ font-size:14px; }
+    /* Calendar + status card become one balanced work-area: equal height (stretch), each
+       panel's own content centered within that height, instead of both just top-aligned
+       with whatever their natural content height happens to be. */
+    .home-columns{ max-width:min(94vw, 1180px); flex-direction:row; align-items:stretch; gap:28px; }
+    .home-columns > .cal-wrap, .home-columns > .card{ max-width:none; margin-bottom:0; }
+    .home-columns > .cal-wrap{
+      flex:1.15; padding:22px; display:flex; flex-direction:column; justify-content:center;
+      background:rgba(255,255,255,.92); /* opaque enough that a tall panel crossing the
+        sky/grass horizon line doesn't visibly change tint partway down */
+    }
+    .home-columns > .card{
+      flex:1; display:flex; flex-direction:column; justify-content:center; padding:30px;
+    }
+
+    .cal-weekdays, .cal-grid{ gap:8px; }
+    .cal-weekdays div{ font-size:13px; }
+    .cal-nav button{ width:36px; height:36px; font-size:18px; }
+    .cal-month-label{ font-size:16px; }
+    .cal-cell{ font-size:18px; border-width:2px; }
+
+    .streak-big{ font-size:54px; }
+    .best-streak{ font-size:14px; margin-bottom:20px; }
+    .badge-row{ gap:8px; margin-bottom:22px; }
+    .badge-chip{ width:44px; height:44px; font-size:23px; }
+    .primary-btn{ font-size:23px; padding:24px 10px; }
+    .home .hint{ font-size:13px; margin-top:18px; }
+
+    footer{ padding-top:14px; font-size:11px; }
+
+    /* Quiz / review / done overlay: a real wide layout with its own max-width computed as a
+       share of viewport width, not the ~700px "big phone card" it used to be capped at. */
+    #pageOverlay{ justify-content:center; padding-top:calc(env(safe-area-inset-top) + 10px); }
+    .back-btn{ width:88vw; max-width:1000px; font-size:14px; }
+    .solo-card{ width:88vw; max-width:1000px; padding:32px 44px; }
+    .backpack{ width:88vw; max-width:1000px; padding:16px 20px; }
+
+    .progress-row{ font-size:15px; margin-bottom:18px; }
+    .subject-tag{ font-size:13px; padding:4px 14px; }
+    .timer-badge{ font-size:14px; padding:3px 10px; }
+    .question-box{ margin:30px 0 34px; }
+    .qtext{ font-size:38px; }
+    .qtext.big{ font-size:60px; }
+    .speak-btn{ width:48px; height:48px; font-size:22px; margin-top:14px; }
+    .review-time{ font-size:14px; }
+
+    /* Answer grid: noticeably bigger targets, but width-capped and centered rather than
+       stretched edge-to-edge — full-bleed at this card width would make each button a thin
+       wide bar instead of a comfortable tap target. */
+    .options{ gap:22px; margin:24px auto 0; max-width:660px; }
+    .opt-btn{ font-size:26px; padding:24px 12px; min-height:90px; }
+    .confirm-btn{ max-width:660px; margin:22px auto 0; display:block; }
+
+    .loot{ width:62px; height:62px; font-size:28px; }
+    .backpack .label{ font-size:14px; margin-bottom:2px; }
+
+    .done .big{ font-size:60px; }
+    .done h2{ font-size:22px; }
+    .done p{ font-size:16px; }
+    .stars-line{ font-size:34px; }
+    .badge-banner{ font-size:14px; }
+  }
+
+  /* Extra headroom on bigger iPads (Air/Pro 11"+ landscape) — same composition, a bit more
+     of it, not a separate layout. */
+  @media (orientation:landscape) and (min-width:1180px){
+    .header-row, .home-columns{ max-width:1280px; }
+    .solo-card, .backpack, .back-btn{ width:80vw; max-width:1080px; }
+    .options, .confirm-btn{ max-width:760px; }
   }
 </style>
 </head>
@@ -506,7 +574,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.8.0";
+  const VERSION = "v2.9.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -1518,7 +1586,7 @@
         ${isListen ? `<div class="review-time">${t("listenInstructions")}</div>` : ""}
       </div>
       <div class="options" id="optionsRow"></div>
-      ${isListen ? `<button class="opt-btn" id="listenConfirmBtn" disabled style="width:100%; margin-top:6px;">${t("confirmLabel")}</button>` : ""}
+      ${isListen ? `<button class="opt-btn confirm-btn" id="listenConfirmBtn" disabled>${t("confirmLabel")}</button>` : ""}
       <div class="feedback" id="feedback"></div>
     `;
 
