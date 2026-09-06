@@ -487,6 +487,7 @@
   /* ================= Config ================= */
   const MILESTONES = [3,7,14,30,60,100];
   const BADGE_ICON = {3:"🔥",7:"⛺",14:"🏕️",30:"🏆",60:"💎",100:"👑"};
+  const LOOT_ICONS = ["💎","🥇","🏆","🧭","🔦","🗝️","🔮","🪙","🏅","🦴","🪶","🐚","🧿","🎖️","🌟","🧲","🪘","🏺","💰","🔭"];
   const RECENT_DAYS = 25; // words used within this window are avoided when picking new ones
 
   /* ================= i18n ================= */
@@ -518,6 +519,9 @@
       newBadge:label=>`🎉 New badge unlocked: ${label}!`,
       badgeLabel:m=>`${m}-Day Streak`,
       reactionBanner:(date,emoji)=>`${emoji} Dad cheered for your ${date} practice!`,
+      monthReminderBanner:"📅 This month is wrapping up. No rush — if you get a spare moment, updating this month's bonus content with Claude is a nice-to-have, not a must.",
+      subjectNameEn:"English", subjectNameMath:"Math", andWord:" and ",
+      ladderCeilingBanner:subj=>`🏔️ ${subj} has been at the top level for ${LADDER_CEILING_DAYS}+ days — might be worth designing a new tier together.`,
       reactionRowLabel:"Send a reaction for this day",
       dadReactionLabel:"Dad's reaction:",
       testModeLabel:"Test Mode", testModeHint:"Separate local practice data, cloud sync fully off — nothing here can reach real synced progress",
@@ -559,6 +563,9 @@
       newBadge:label=>`🎉 解锁新徽章：${label}！`,
       badgeLabel:m=>`连胜 ${m} 天`,
       reactionBanner:(date,emoji)=>`${emoji} 爸爸给 ${date} 的练习点赞啦！`,
+      monthReminderBanner:"📅 这个月快过完了。不着急——有空的话可以找Claude更新一下这个月的加分内容，没空跳过也完全没关系。",
+      subjectNameEn:"英语", subjectNameMath:"数学", andWord:"和",
+      ladderCeilingBanner:subj=>`🏔️ ${subj}已经在最高难度待了${LADDER_CEILING_DAYS}天以上——可以考虑找Claude聊聊加一层新内容了。`,
       reactionRowLabel:"给这一天留个反应",
       dadReactionLabel:"爸爸的反应：",
       testModeLabel:"测试模式", testModeHint:"本地独立测试数据，云同步完全关闭 — 不会影响真实的同步进度",
@@ -574,7 +581,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.9.0";
+  const VERSION = "v2.13.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -584,6 +591,55 @@
   // cloud reads/writes are skipped entirely — test mode never touches Firestore, so it can
   // never reach the son's iPad no matter what pairing code is typed in.
   const isDevDevice = /iPhone/i.test(navigator.userAgent);
+
+  // ---- Month-end content reminder (dad's iPhone only) ----
+  // A once-per-month nudge, in the last few days before month-end, to come update
+  // MONTHLY_PACK with whatever the school is currently covering. Lives in its own
+  // localStorage key (not campState) since it's dad-only meta, same pattern as
+  // TEST_MODE_KEY — never synced, never seen by the son's iPad.
+  const MONTH_REMINDER_KEY = "campMonthReminderSeen_v1";
+  const MONTH_REMINDER_WINDOW_DAYS = 3; // starts this many days before the last day of the month
+  function currentMonthKey(){
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  }
+  function shouldShowMonthReminder(){
+    if(!isDevDevice) return false;
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+    if(lastDay - now.getDate() > MONTH_REMINDER_WINDOW_DAYS) return false;
+    return localStorage.getItem(MONTH_REMINDER_KEY) !== currentMonthKey();
+  }
+  function dismissMonthReminder(){
+    localStorage.setItem(MONTH_REMINDER_KEY, currentMonthKey());
+  }
+
+  // ---- Ladder-ceiling reminder (dad's iPhone only) ----
+  // Data-driven, not calendar-driven: fires when a subject has been continuously at the top
+  // of its ladder (level 6) for a while, which is the actual signal that he's outgrown the
+  // whole thing — as opposed to just having cycled a pool at some mid-level, which is normal
+  // and expected and resolves itself the moment he levels up.
+  const LADDER_CEILING_KEY = "campLadderCeilingSeen_v1";
+  const LADDER_CEILING_DAYS = 14;
+  function daysSinceDateStr(dateStr){
+    if(!dateStr) return 0;
+    const then = new Date(dateStr+"T00:00:00");
+    const now = new Date(todayStr()+"T00:00:00");
+    return Math.round((now-then)/86400000);
+  }
+  function ladderCeilingSubjects(){
+    if(!isDevDevice) return [];
+    return ["en","math"].filter(subj => daysSinceDateStr(state.maxLevelSince[subj]) >= LADDER_CEILING_DAYS);
+  }
+  function ladderCeilingDismissKey(){
+    return `${state.maxLevelSince.en||""}|${state.maxLevelSince.math||""}`;
+  }
+  function shouldShowLadderCeilingReminder(){
+    return ladderCeilingSubjects().length > 0 && localStorage.getItem(LADDER_CEILING_KEY) !== ladderCeilingDismissKey();
+  }
+  function dismissLadderCeilingReminder(){
+    localStorage.setItem(LADDER_CEILING_KEY, ladderCeilingDismissKey());
+  }
   const TEST_MODE_KEY = "campTestMode_v1";
   const isTestMode = () => isDevDevice && localStorage.getItem(TEST_MODE_KEY) === "1";
   const STORE_KEY = isTestMode() ? "campState_v1_TEST" : "campState_v1";
@@ -599,7 +655,7 @@
         lang:"en", userName:"", level:{ en:1, math:1 }, streak:0, bestStreak:0, badges:[],
         lastCompleteDate:null, history:{}, usedLog:{ en:[] },
         today:{ date:null, items:[], answers:[], timeSpent:0 },
-        pairCode:"", reactions:{}, seenReactionKeys:[]
+        pairCode:"", reactions:{}, seenReactionKeys:[], maxLevelSince:{ en:null, math:null }
       };
     }
     if(!raw.lang) raw.lang = "en";
@@ -622,11 +678,15 @@
       if(raw.level && raw.level.en >= 5) raw.level.en += 1;
       raw.levelShiftV3Applied = true;
     }
+    if(!raw.maxLevelSince) raw.maxLevelSince = { en:null, math:null };
+    if(!raw.today.lootSeq) raw.today.lootSeq = rollLootSeq();
     return raw;
   }
   function saveState(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
 
   let state = loadState();
+  saveState(state); // flush any schema migrations from loadState() immediately, so a crash
+                     // or force-quit before the next natural save can't lose them
   let justEarnedBadges = [];
 
   /* ================= Question banks (leveled, expanded for ~1 month variety) ================= */
@@ -879,18 +939,76 @@
     return items;
   }
 
+  // ===== Monthly content pack =====
+  // The ONE block meant to be replaced wholesale each month, in a conversation about what
+  // the school is actually covering — not tied to the adaptive ladder above, which already
+  // handles generic fluency/variety on its own (see buildTodaySet's slot math). Set `month`
+  // to the current "YYYY-MM" when filling this in; if it doesn't match today's month, or
+  // both lists are empty, the pack is silently skipped and all 10 questions come from the
+  // regular ladder, same as before this existed. Difficulty here is deliberately fixed, not
+  // tied to state.level — this is a recognition task against specific content, not a phonics
+  // difficulty progression, so it doesn't need six difficulty variants authored every month.
+  const MONTHLY_PACK = {
+    month: "",   // e.g. "2026-09" — leave "" when nothing's configured for this month
+    en: [],      // [word, emoji] pairs, same shape as SIGHT_WORDS
+    math: []     // [prompt, answer] pairs, fixed — no random number generation
+  };
+  function monthlyPackActive(){
+    return MONTHLY_PACK.month === currentMonthKey() && (MONTHLY_PACK.en.length || MONTHLY_PACK.math.length);
+  }
+  function makePackEnQuestion(row){
+    const [word, emoji] = row;
+    // Distractor emojis come from the regular sight-word bank, not just the pack itself — a
+    // 10-15 word monthly list usually isn't enough on its own to fill 4 plausible options.
+    const wrongPool = SIGHT_WORDS.filter(w=>w[1]!==emoji).map(w=>w[1]);
+    const opts = buildOptions(emoji, wrongPool, 4);
+    return { subject:"en", prompt: word, speak: word, options: opts, answer: emoji, big:true, fromPack:true };
+  }
+  function makePackMathQuestion(row){
+    const [prompt, answer] = row;
+    let wrongOpts = new Set(), tries = 0;
+    while(wrongOpts.size < 3 && tries < 40){
+      tries++;
+      const delta = (1+Math.floor(Math.random()*8)) * (Math.random()<0.5?-1:1);
+      const w = answer + delta;
+      if(w >= 0 && w !== answer) wrongOpts.add(w);
+    }
+    const opts = [answer, ...wrongOpts].sort(()=>Math.random()-0.5);
+    return { subject:"math", prompt, speak:null, options:opts.map(String), answer:String(answer), fromPack:true };
+  }
+  // Splices one pack question into an otherwise-normal 5-item list, at a random position so
+  // it doesn't always land in the same slot of the day.
+  function spliceInPackItem(regularFour, packQ){
+    const slot = Math.floor(Math.random()*5);
+    return regularFour.slice(0,slot).concat([packQ], regularFour.slice(slot));
+  }
+
   function buildTodaySet(){
-    const en = buildEnglishItems(state.level.en, 5);
-    const math = buildMathItems(state.level.math, 5);
+    const usePack = monthlyPackActive();
+    const en = (usePack && MONTHLY_PACK.en.length)
+      ? spliceInPackItem(buildEnglishItems(state.level.en, 4), makePackEnQuestion(MONTHLY_PACK.en[Math.floor(Math.random()*MONTHLY_PACK.en.length)]))
+      : buildEnglishItems(state.level.en, 5);
+    const math = (usePack && MONTHLY_PACK.math.length)
+      ? spliceInPackItem(buildMathItems(state.level.math, 4), makePackMathQuestion(MONTHLY_PACK.math[Math.floor(Math.random()*MONTHLY_PACK.math.length)]))
+      : buildMathItems(state.level.math, 5);
     const mixed = [];
     for(let i=0;i<5;i++){ mixed.push(en[i]); mixed.push(math[i]); }
     return mixed;
   }
 
   /* ================= Day bootstrap ================= */
+  // Builds a fresh "today" object — used on day rollover, give-up, and reset. Centralized so
+  // lootSeq (the day's randomized backpack reveal order) is always rolled fresh alongside a
+  // new question set, never left stale from a previous day's roll.
+  function rollLootSeq(){
+    return LOOT_ICONS.slice().sort(()=>Math.random()-0.5).slice(0,10);
+  }
+  function makeFreshToday(preserveTimeSpent){
+    return { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent: preserveTimeSpent||0, lootSeq: rollLootSeq() };
+  }
   function checkDayRollover(){
     if(state.today.date !== todayStr()){
-      state.today = { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent:0 };
+      state.today = makeFreshToday();
       saveState(state);
       return true;
     }
@@ -1036,7 +1154,7 @@
       const key = cloud.resetSignal.key;
       if(state.history[key]) delete state.history[key];
       if(key === todayStr()){
-        state.today = { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent: 0 };
+        state.today = makeFreshToday();
       }
       recomputeStreak();
       state.lastAppliedResetTs = cloud.resetSignal.ts;
@@ -1050,6 +1168,11 @@
           state.history[k].reaction = remote.reaction; // a reaction can arrive from the other device
         }
       });
+      // Recompute rather than trust a transmitted streak number: state.history is the real
+      // source of truth and is now current, so derive streak fresh from it on every device.
+      // This is also what fixes streak never showing up on a device that never does any
+      // practice itself (e.g. dad's iPhone) — it previously only ever merged bestStreak.
+      recomputeStreak();
     }
     if(cloud.meta){
       if((cloud.meta.bestStreak||0) > state.bestStreak) state.bestStreak = cloud.meta.bestStreak;
@@ -1136,8 +1259,6 @@
     document.getElementById("testModeHint").style.display = "none";
     document.getElementById("resetTodayRow").style.display = "none";
   }
-
-  const LOOT_ICONS = ["💎","💎","🥇","💎","🥇","💎","💎","🥇","💎","🏆"];
 
   let view = "home";
   let reviewKey = null;
@@ -1347,10 +1468,11 @@
     lootRow.innerHTML = "";
     const correctCount = state.today.answers.filter(a=>a.correct).length;
     backpackLabel.textContent = `${state.lang==='zh'?'今日背包':'Backpack'} · ${correctCount}/10`;
+    const seq = state.today.lootSeq || rollLootSeq();
     for(let i=0;i<10;i++){
       const div = document.createElement("div");
       div.className = "loot" + (i < correctCount ? "" : " empty");
-      div.textContent = i < correctCount ? LOOT_ICONS[i] : "·";
+      div.textContent = i < correctCount ? seq[i] : "·";
       lootRow.appendChild(div);
     }
   }
@@ -1381,10 +1503,19 @@
     const banner = pendingReactionBanner
       ? `<div class="badge-banner" id="reactionBanner">${t("reactionBanner")(pendingReactionBanner.date, pendingReactionBanner.emoji)}</div>`
       : "";
+    const monthBanner = shouldShowMonthReminder()
+      ? `<div class="badge-banner" id="monthReminderBanner">${t("monthReminderBanner")}</div>`
+      : "";
+    const ceilingSubs = shouldShowLadderCeilingReminder() ? ladderCeilingSubjects() : [];
+    const ceilingBanner = ceilingSubs.length
+      ? `<div class="badge-banner" id="ceilingReminderBanner">${t("ladderCeilingBanner")(ceilingSubs.map(s=>t(s==='math'?'subjectNameMath':'subjectNameEn')).join(t('andWord')))}</div>`
+      : "";
 
     homeCard.innerHTML = `
       <div class="home">
         ${banner}
+        ${monthBanner}
+        ${ceilingBanner}
         <div class="streak-big">${t("streak")(state.streak)}</div>
         <div class="best-streak">${t("bestStreak")(state.bestStreak)}</div>
         <div class="badge-row">${badgeRow}</div>
@@ -1394,6 +1525,20 @@
       </div>
     `;
     document.getElementById("startBtn").addEventListener("click", onClick);
+    const monthReminderEl = document.getElementById("monthReminderBanner");
+    if(monthReminderEl){
+      monthReminderEl.addEventListener("click", ()=>{
+        dismissMonthReminder();
+        renderHome();
+      });
+    }
+    const ceilingReminderEl = document.getElementById("ceilingReminderBanner");
+    if(ceilingReminderEl){
+      ceilingReminderEl.addEventListener("click", ()=>{
+        dismissLadderCeilingReminder();
+        renderHome();
+      });
+    }
     const reactionBannerEl = document.getElementById("reactionBanner");
     if(reactionBannerEl && pendingReactionBanner){
       const seenKey = pendingReactionBanner.date + ":" + pendingReactionBanner.emoji;
@@ -1411,7 +1556,7 @@
     if(giveUpBtn){
       giveUpBtn.addEventListener("click", ()=>{
         if(confirm(t("giveUpConfirm"))){
-          state.today = { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent: state.today.timeSpent||0 };
+          state.today = makeFreshToday(state.today.timeSpent);
           saveState(state);
           render();
         }
@@ -1524,7 +1669,7 @@
   function resetTodayProgress(){
     const key = todayStr();
     delete state.history[key];
-    state.today = { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent: 0 };
+    state.today = makeFreshToday();
     recomputeStreak();
     saveState(state);
     // Use deleteDay (not pushToCloud/setDoc merge) — merge can only add/overwrite fields,
@@ -1557,6 +1702,17 @@
         state.level[subject] -= 1;
         state.today[wrongKey] = 0;
       }
+    }
+    // Track how long a subject has been sitting at the very top of the ladder (level 6) —
+    // not to catch "pool ran low at some level" (that's normal, expected recycling that
+    // happens routinely at every level and isn't a problem on its own), but to catch the one
+    // case that actually matters: he's outgrown the entire ladder and there's no level 7 to
+    // graduate into, so he'd otherwise just keep silently re-cycling the same top-tier pool
+    // indefinitely with nothing to signal it. Invariant: non-null iff level is currently 6.
+    if(state.level[subject] === 6){
+      if(!state.maxLevelSince[subject]) state.maxLevelSince[subject] = todayStr();
+    } else {
+      state.maxLevelSince[subject] = null;
     }
   }
 
@@ -1660,7 +1816,12 @@
       subject:q.subject, correct,
       prompt:q.prompt, chosen: String(chosen), correctAnswer: String(q.answer)
     });
-    adjustLevel(q.subject, correct);
+    // Monthly-pack questions are fixed-difficulty recognition content, not part of the
+    // adaptive ladder — they still count toward today's score/stars/backpack like any other
+    // question, but shouldn't feed the level-up/level-down combo counters, or an easy
+    // pack word / an unfamiliar one could nudge the ladder level for reasons that have
+    // nothing to do with his actual skill at that ladder tier.
+    if(!q.fromPack) adjustLevel(q.subject, correct);
     saveState(state);
     renderBackpack();
 
