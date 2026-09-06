@@ -32,6 +32,29 @@
   }
   .pixel{font-family:'Press Start 2P', monospace;}
 
+  /* ---------- Ambient background decoration (iPad only, injected via JS) ----------
+     Pure decoration: fixed, behind everything, never intercepts taps. Seeded from today's
+     date (see decor-injection JS) so the count/size/speed differs day to day without any
+     stored state — same look all day, a fresh roll tomorrow. */
+  #skyDecor, #grassDecor{ position:fixed; inset:0; z-index:-1; pointer-events:none; overflow:hidden; }
+  .cloud{
+    position:absolute; background:rgba(255,255,255,.85); border-radius:999px;
+    animation-name:cloudDrift; animation-timing-function:linear; animation-iteration-count:infinite;
+  }
+  .cloud::before, .cloud::after{ content:""; position:absolute; background:inherit; border-radius:50%; }
+  .cloud::before{ width:55%; height:130%; top:-35%; left:12%; }
+  .cloud::after{ width:40%; height:100%; top:-20%; right:14%; }
+  @keyframes cloudDrift{ from{ transform:translateX(-15vw); } to{ transform:translateX(115vw); } }
+  .blade{
+    position:absolute; bottom:0; width:3px; background:var(--grass-dark);
+    transform-origin:bottom center; border-radius:2px 2px 0 0;
+    animation-name:grassSway; animation-timing-function:ease-in-out; animation-iteration-count:infinite;
+  }
+  @keyframes grassSway{ 0%,100%{ transform:rotate(-6deg); } 50%{ transform:rotate(6deg); } }
+  @media (prefers-reduced-motion:reduce){
+    .cloud, .blade{ animation:none !important; }
+  }
+
   /* ---------- Header row: title centered, gear at right, no lopsided whitespace ---------- */
   .header-row{
     width:100%; max-width:480px; display:grid;
@@ -581,7 +604,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.13.0";
+  const VERSION = "v2.14.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -1884,6 +1907,61 @@
   document.addEventListener("visibilitychange", refreshOnForeground);
   window.addEventListener("pageshow", refreshOnForeground);
   window.addEventListener("focus", refreshOnForeground);
+
+  // ---- Ambient background decoration (iPad only — dad's iPhone has no spare layout room
+  // and doesn't need it) ----
+  // Seeded from today's date: a tiny hash + linear-congruential PRNG, so the scene (cloud
+  // count/size/thinness/speed, blade count/height) is stable all day and different
+  // tomorrow — with zero stored state, since it's purely a function of todayStr(). Injected
+  // once at boot as fixed background children of body, sibling to #homePage/#pageOverlay,
+  // so view changes (home/quiz/done) never touch or re-roll it.
+  if(!isDevDevice){
+    function seededRandom(seed){
+      let s = seed % 2147483647;
+      if(s <= 0) s += 2147483646;
+      return function(){ s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+    }
+    function stringSeed(str){
+      let h = 0;
+      for(let i=0;i<str.length;i++) h = (h*31 + str.charCodeAt(i)) >>> 0;
+      return h || 1;
+    }
+    const decorRand = seededRandom(stringSeed(todayStr()+"-decor"));
+
+    const skyDecor = document.createElement("div");
+    skyDecor.id = "skyDecor";
+    const cloudCount = 3 + Math.floor(decorRand()*4); // 3-6 clouds
+    for(let i=0;i<cloudCount;i++){
+      const cloud = document.createElement("div");
+      cloud.className = "cloud";
+      const w = 60 + decorRand()*110;
+      cloud.style.width = w+"px";
+      cloud.style.height = (w*(0.4+decorRand()*0.15))+"px";
+      cloud.style.top = (4 + decorRand()*42)+"%"; // stays within the sky band
+      cloud.style.left = (decorRand()*100)+"%";
+      cloud.style.opacity = (0.4 + decorRand()*0.45).toFixed(2); // "thinness"
+      const duration = 75 + decorRand()*95; // slow: ~75-170s per crossing
+      cloud.style.animationDuration = duration+"s";
+      cloud.style.animationDelay = (-decorRand()*duration)+"s"; // desync so they don't bunch up
+      skyDecor.appendChild(cloud);
+    }
+
+    const grassDecor = document.createElement("div");
+    grassDecor.id = "grassDecor";
+    const bladeCount = 18 + Math.floor(decorRand()*16); // 18-33 blades
+    for(let i=0;i<bladeCount;i++){
+      const blade = document.createElement("div");
+      blade.className = "blade";
+      blade.style.height = (10 + decorRand()*17)+"px";
+      blade.style.left = ((i/bladeCount)*100 + (decorRand()*3-1.5))+"%";
+      blade.style.animationDuration = (2 + decorRand()*2.5)+"s";
+      blade.style.animationDelay = (-decorRand()*4)+"s";
+      grassDecor.appendChild(blade);
+    }
+
+    document.body.prepend(grassDecor);
+    document.body.prepend(skyDecor);
+  }
 })();
 </script>
 
