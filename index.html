@@ -615,7 +615,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.15.0";
+  const VERSION = "v2.15.1";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -1178,7 +1178,7 @@
   function starsHtml(n){ let s=""; for(let i=0;i<3;i++) s += i<n ? "⭐" : "☆"; return s; }
 
   /* ================= Cloud sync (via window.CampSync, see the module script above) ================= */
-  const REACTION_EMOJIS = ["👍","🌟","🎉","❤️"];
+  const REACTION_EMOJIS = ["👍","🌟","🎉","❤️","💪","😐","😕"];
   let syncStatus = "off"; // 'off' | 'connecting' | 'on' | 'error'
 
   function cloudPayloadFromLocal(){
