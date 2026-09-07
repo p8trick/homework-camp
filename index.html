@@ -615,7 +615,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.14.1";
+  const VERSION = "v2.15.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -1069,14 +1069,20 @@
   }
   function speak(text, lang){ speakUtterance(text, lang); }
 
-  let greetingPlayed = false;
+  let greetingState = "idle"; // idle -> pending -> done, or back to idle if the attempt failed
   async function tryGreeting(){
-    if(greetingPlayed) return;
+    // Synchronous re-entry guard: set BEFORE the await, not after it resolves — otherwise
+    // two calls that land while the first is still in flight (e.g. touchend and its
+    // synthetic click firing for the same physical tap, or a second tap arriving before the
+    // first attempt's ~800ms timeout settles) both slip through and each queue their own
+    // utterance, which is exactly what produced the double/triple greeting.
+    if(greetingState !== "idle") return;
+    greetingState = "pending";
     const ok = await speakUtterance(t("greeting")(state.userName.trim()), state.lang==="zh"?"zh-CN":"en-US");
-    if(ok) greetingPlayed = true;
+    greetingState = ok ? "done" : "idle"; // failed attempts go back to idle so a later real gesture can still retry
   }
   function gestureFallback(){
-    if(greetingPlayed){
+    if(greetingState === "done"){
       document.removeEventListener("click", gestureFallback);
       document.removeEventListener("touchend", gestureFallback);
       return;
@@ -1893,7 +1899,11 @@
   function bootSyncIfConfigured(){ if(state.pairCode) connectSync(state.pairCode); }
   if(window.CampSync) bootSyncIfConfigured();
   else window.addEventListener("campsync-ready", bootSyncIfConfigured, { once:true });
-  tryGreeting();
+  // No boot-time auto-attempt: iOS requires a genuine user gesture for speechSynthesis to
+  // actually produce sound, so an unconditional call here almost never plays anything for
+  // real anyway — it just adds a second call site that can race the gesture-triggered one.
+  // Relying solely on the first tap/touch (gestureFallback below) means there's exactly one
+  // path that can ever start a greeting attempt.
   document.addEventListener("click", gestureFallback);
   document.addEventListener("touchend", gestureFallback);
   window.__resetCamp = function(){ localStorage.removeItem(STORE_KEY); location.reload(); };
@@ -1941,15 +1951,18 @@
 
     const skyDecor = document.createElement("div");
     skyDecor.id = "skyDecor";
-    const cloudCount = 6 + Math.floor(decorRand()*5); // 6-10 clouds — was 3-6, too sparse
+    // Kept high — up in the strip above the calendar/status panels — since anything lower
+    // just disappears behind those two panels on the home screen (that's why "only 1-2
+    // visible" happened before: most of the previous 3-48% band was hidden real estate).
+    const cloudCount = 8 + Math.floor(decorRand()*7); // 8-14 clouds
     const cloudShapes = ["", "cloud-b", "cloud-c"];
     for(let i=0;i<cloudCount;i++){
       const cloud = document.createElement("div");
       cloud.className = "cloud " + cloudShapes[Math.floor(decorRand()*cloudShapes.length)];
-      const w = 55 + decorRand()*120;
+      const w = 50 + decorRand()*110;
       cloud.style.width = w+"px";
       cloud.style.height = (w*(0.4+decorRand()*0.15))+"px";
-      cloud.style.top = (3 + decorRand()*45)+"%"; // stays within the sky band
+      cloud.style.top = (1 + decorRand()*12)+"%"; // stays clear above the panels
       cloud.style.left = (decorRand()*100)+"%";
       cloud.style.opacity = (0.35 + decorRand()*0.5).toFixed(2); // "thinness"
       const duration = 70 + decorRand()*100; // slow: ~70-170s per crossing
@@ -1960,16 +1973,16 @@
 
     const grassDecor = document.createElement("div");
     grassDecor.id = "grassDecor";
-    // Scattered across the whole grass band (60%-97% of viewport height), not lined up in a
-    // single row glued to the very bottom edge — reads as a meadow, not a picket fence.
-    const bladeCount = 45 + Math.floor(decorRand()*30); // 45-74 blades
+    // Kept low — in the strip below where the panels end — for the same reason in reverse:
+    // grass placed higher just vanishes behind the calendar/status panels.
+    const bladeCount = 70 + Math.floor(decorRand()*45); // 70-114 blades
     for(let i=0;i<bladeCount;i++){
       const blade = document.createElement("div");
       blade.className = "blade";
       blade.style.height = (9 + decorRand()*16)+"px";
       blade.style.width = (2 + decorRand()*2)+"px";
       blade.style.left = (decorRand()*100)+"%";
-      blade.style.top = (61 + decorRand()*36)+"%";
+      blade.style.top = (80 + decorRand()*17)+"%";
       blade.style.animationDuration = (2 + decorRand()*2.5)+"s";
       blade.style.animationDelay = (-decorRand()*4)+"s";
       grassDecor.appendChild(blade);
