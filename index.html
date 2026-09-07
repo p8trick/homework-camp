@@ -26,6 +26,11 @@
   body{
     background:var(--sky);
     background-image:linear-gradient(180deg, var(--sky) 0%, var(--sky) 60%, var(--grass) 60%, var(--grass) 100%);
+    background-attachment:fixed; /* anchor the gradient to the true viewport, not body's own
+      box — iOS Safari's 100vh can be shorter than the real visual viewport in standalone PWA
+      mode, which left a sliver of the plain --sky fallback color exposed at the very bottom
+      (below where the gradient's own box ended) with the fixed-position grass blades poking
+      up through it, since those size to the real viewport regardless of body's height */
     font-family:'Baloo 2', system-ui, sans-serif; color:var(--ink);
     min-height:100vh; display:flex; flex-direction:column; align-items:center;
     padding:calc(env(safe-area-inset-top) + 6px) 12px 32px; overflow-x:hidden; position:relative;
@@ -42,11 +47,17 @@
     animation-name:cloudDrift; animation-timing-function:linear; animation-iteration-count:infinite;
   }
   .cloud::before, .cloud::after{ content:""; position:absolute; background:inherit; border-radius:50%; }
+  /* Three silhouettes so the sky doesn't look like one cloud copy-pasted at different sizes:
+     puffy (default), a taller rounder cumulus, and a flatter wispy one. */
   .cloud::before{ width:55%; height:130%; top:-35%; left:12%; }
   .cloud::after{ width:40%; height:100%; top:-20%; right:14%; }
+  .cloud.cloud-b::before{ width:70%; height:155%; top:-48%; left:6%; }
+  .cloud.cloud-b::after{ width:56%; height:130%; top:-35%; right:4%; }
+  .cloud.cloud-c::before{ width:34%; height:78%; top:-15%; left:20%; }
+  .cloud.cloud-c::after{ width:28%; height:66%; top:-10%; right:22%; }
   @keyframes cloudDrift{ from{ transform:translateX(-15vw); } to{ transform:translateX(115vw); } }
   .blade{
-    position:absolute; bottom:0; width:3px; background:var(--grass-dark);
+    position:absolute; width:3px; background:var(--grass-dark);
     transform-origin:bottom center; border-radius:2px 2px 0 0;
     animation-name:grassSway; animation-timing-function:ease-in-out; animation-iteration-count:infinite;
   }
@@ -604,7 +615,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.14.0";
+  const VERSION = "v2.14.1";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -1930,17 +1941,18 @@
 
     const skyDecor = document.createElement("div");
     skyDecor.id = "skyDecor";
-    const cloudCount = 3 + Math.floor(decorRand()*4); // 3-6 clouds
+    const cloudCount = 6 + Math.floor(decorRand()*5); // 6-10 clouds — was 3-6, too sparse
+    const cloudShapes = ["", "cloud-b", "cloud-c"];
     for(let i=0;i<cloudCount;i++){
       const cloud = document.createElement("div");
-      cloud.className = "cloud";
-      const w = 60 + decorRand()*110;
+      cloud.className = "cloud " + cloudShapes[Math.floor(decorRand()*cloudShapes.length)];
+      const w = 55 + decorRand()*120;
       cloud.style.width = w+"px";
       cloud.style.height = (w*(0.4+decorRand()*0.15))+"px";
-      cloud.style.top = (4 + decorRand()*42)+"%"; // stays within the sky band
+      cloud.style.top = (3 + decorRand()*45)+"%"; // stays within the sky band
       cloud.style.left = (decorRand()*100)+"%";
-      cloud.style.opacity = (0.4 + decorRand()*0.45).toFixed(2); // "thinness"
-      const duration = 75 + decorRand()*95; // slow: ~75-170s per crossing
+      cloud.style.opacity = (0.35 + decorRand()*0.5).toFixed(2); // "thinness"
+      const duration = 70 + decorRand()*100; // slow: ~70-170s per crossing
       cloud.style.animationDuration = duration+"s";
       cloud.style.animationDelay = (-decorRand()*duration)+"s"; // desync so they don't bunch up
       skyDecor.appendChild(cloud);
@@ -1948,12 +1960,16 @@
 
     const grassDecor = document.createElement("div");
     grassDecor.id = "grassDecor";
-    const bladeCount = 18 + Math.floor(decorRand()*16); // 18-33 blades
+    // Scattered across the whole grass band (60%-97% of viewport height), not lined up in a
+    // single row glued to the very bottom edge — reads as a meadow, not a picket fence.
+    const bladeCount = 45 + Math.floor(decorRand()*30); // 45-74 blades
     for(let i=0;i<bladeCount;i++){
       const blade = document.createElement("div");
       blade.className = "blade";
-      blade.style.height = (10 + decorRand()*17)+"px";
-      blade.style.left = ((i/bladeCount)*100 + (decorRand()*3-1.5))+"%";
+      blade.style.height = (9 + decorRand()*16)+"px";
+      blade.style.width = (2 + decorRand()*2)+"px";
+      blade.style.left = (decorRand()*100)+"%";
+      blade.style.top = (61 + decorRand()*36)+"%";
       blade.style.animationDuration = (2 + decorRand()*2.5)+"s";
       blade.style.animationDelay = (-decorRand()*4)+"s";
       grassDecor.appendChild(blade);
