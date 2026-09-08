@@ -77,6 +77,8 @@
     font-size:16px; background:var(--paper); border:2px solid var(--ink);
     box-shadow:2px 2px 0 rgba(0,0,0,.3); cursor:pointer;
   }
+  .gear-btn.spinning{ animation:spin360 .6s linear; }
+  @keyframes spin360{ from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
   header{ text-align:center; }
   header h1{ font-size:15px; line-height:1.6; margin:0; color:var(--paper); text-shadow:2px 2px 0 var(--night); }
 
@@ -123,6 +125,15 @@
   }
   .progress-row{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-weight:700; font-size:13px; color:var(--stone); }
   .timer-badge{ font-weight:800; font-size:12px; color:var(--night); background:var(--sky); border:2px solid var(--ink); padding:2px 8px; }
+  .heart-badge{ font-size:17px; display:inline-block; }
+  .heart-badge.breaking{ animation:heartBreak .6s ease; }
+  @keyframes heartBreak{
+    0%{ transform:scale(1) rotate(0deg); }
+    25%{ transform:scale(1.35) rotate(-10deg); }
+    55%{ transform:scale(0.8) rotate(10deg); }
+    80%{ transform:scale(1.1) rotate(-4deg); }
+    100%{ transform:scale(1) rotate(0deg); }
+  }
   .subject-tag{ display:inline-block; padding:3px 10px; font-size:11px; font-weight:800; border:2px solid var(--ink); background:var(--sky); }
   .subject-tag.math{background:var(--gold);}
 
@@ -161,6 +172,7 @@
   .home{ text-align:center; }
   .streak-big{ font-size:34px; font-weight:800; margin:6px 0 2px; }
   .best-streak{ font-size:12px; font-weight:700; color:var(--stone); margin-bottom:14px; }
+  .heart-status{ font-size:13px; font-weight:700; margin-bottom:12px; }
   .badge-row{ display:flex; gap:6px; justify-content:center; flex-wrap:wrap; margin-bottom:16px; }
   .badge-chip{
     font-size:18px; width:34px; height:34px; display:flex; align-items:center; justify-content:center;
@@ -333,6 +345,7 @@
     .progress-row{ font-size:15px; margin-bottom:18px; }
     .subject-tag{ font-size:13px; padding:4px 14px; }
     .timer-badge{ font-size:14px; padding:3px 10px; }
+    .heart-badge{ font-size:24px; }
     .question-box{ margin:30px 0 34px; }
     .qtext{ font-size:38px; }
     .qtext.big{ font-size:60px; }
@@ -372,7 +385,7 @@
 
 <div id="homePage">
   <div class="header-row">
-    <div></div>
+    <div class="gear-btn" id="refreshBtn" title="Sync now">🔄</div>
     <header><h1 class="pixel" id="appTitle">Daily Camp</h1></header>
     <div class="gear-btn" id="settingsBtn">⚙️</div>
   </div>
@@ -530,6 +543,7 @@
       appTitle:"Daily Camp", appSub:"",
       streak:n=>`🔥 ${n}`,
       bestStreak:n=>`Best streak: ${n} days`,
+      heartStatusAvailable:"❤️ Heart available today", heartStatusUsed:"💔 Heart used today",
       startBtn:"Start Today", continueBtn:(i,t)=>`Continue (${i}/${t})`,
       doneBtnReview:"Done for today · Review",
       hint:"Tap a day on the calendar to review past practice",
@@ -538,6 +552,7 @@
       subjectEn:"ENGLISH", subjectMath:"MATH",
       back:"← Home",
       correctFb:"Found treasure! Correct 💎", wrongFb:"Good try — correct answer shown in green",
+      heartUsedFb:"💔 Heart used! Give it one more try",
       doneTitle:"Camp complete for today!",
       doneScore:(c,t)=>`${c} / ${t} correct`,
       timeSpent:s=>`Time spent: ${s}`,
@@ -574,6 +589,7 @@
       appTitle:"每日营地", appSub:"DAILY CAMP",
       streak:n=>`🔥 ${n}`,
       bestStreak:n=>`最长连胜：${n} 天`,
+      heartStatusAvailable:"❤️ 今天还有一颗爱心", heartStatusUsed:"💔 今天的爱心已用掉",
       startBtn:"开始今日练习", continueBtn:(i,t)=>`继续今日练习 (${i}/${t})`,
       doneBtnReview:"今日已完成 · 查看今天的复习",
       hint:"点击日历里的日期可以回顾之前学过的内容",
@@ -582,6 +598,7 @@
       subjectEn:"英语 ENGLISH", subjectMath:"数学 MATH",
       back:"← 返回主页",
       correctFb:"挖到宝了！答对啦 💎", wrongFb:"再想想～正确答案已标绿",
+      heartUsedFb:"💔 用掉一颗爱心！再试一次",
       doneTitle:"今天的营地任务完成啦！",
       doneScore:(c,t)=>`答对 ${c} / ${t} 题`,
       timeSpent:s=>`用时：${s}`,
@@ -615,7 +632,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.15.1";
+  const VERSION = "v2.16.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -714,6 +731,7 @@
     }
     if(!raw.maxLevelSince) raw.maxLevelSince = { en:null, math:null };
     if(!raw.today.lootSeq) raw.today.lootSeq = rollLootSeq();
+    if(raw.today.heartUsed == null) raw.today.heartUsed = false;
     return raw;
   }
   function saveState(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
@@ -1037,8 +1055,8 @@
   function rollLootSeq(){
     return LOOT_ICONS.slice().sort(()=>Math.random()-0.5).slice(0,10);
   }
-  function makeFreshToday(preserveTimeSpent){
-    return { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent: preserveTimeSpent||0, lootSeq: rollLootSeq() };
+  function makeFreshToday(preserveTimeSpent, preserveHeartUsed){
+    return { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent: preserveTimeSpent||0, lootSeq: rollLootSeq(), heartUsed: !!preserveHeartUsed };
   }
   function checkDayRollover(){
     if(state.today.date !== todayStr()){
@@ -1182,7 +1200,15 @@
   let syncStatus = "off"; // 'off' | 'connecting' | 'on' | 'error'
 
   function cloudPayloadFromLocal(){
-    return { days: state.history, meta: { streak: state.streak, bestStreak: state.bestStreak, badges: state.badges } };
+    return {
+      days: state.history,
+      meta: { streak: state.streak, bestStreak: state.bestStreak, badges: state.badges },
+      // Today's heart status isn't part of `days` (that only gets a day once it's finished),
+      // but dad's iPhone needs to see it live, not just after the day completes — so it
+      // travels separately, scoped to today's date so a stale payload from a different day
+      // never gets misread as "today".
+      todayMeta: { date: state.today.date, heartUsed: !!state.today.heartUsed }
+    };
   }
   function mergeCloudIntoLocal(cloud){
     if(!cloud) return;
@@ -1216,6 +1242,11 @@
     }
     if(cloud.meta){
       if((cloud.meta.bestStreak||0) > state.bestStreak) state.bestStreak = cloud.meta.bestStreak;
+    }
+    if(cloud.todayMeta && cloud.todayMeta.date === state.today.date){
+      // OR, never AND: once the heart is spent anywhere, it reads as spent everywhere. A
+      // stale "not yet used" from the other device must never un-consume it locally.
+      state.today.heartUsed = state.today.heartUsed || !!cloud.todayMeta.heartUsed;
     }
     saveState(state);
   }
@@ -1273,6 +1304,7 @@
   const calPrev = document.getElementById("calPrev");
   const calNext = document.getElementById("calNext");
   const settingsBtn = document.getElementById("settingsBtn");
+  const refreshBtn = document.getElementById("refreshBtn");
   const settingsModal = document.getElementById("settingsModal");
   const closeSettings = document.getElementById("closeSettings");
   const settingsTitle = document.getElementById("settingsTitle");
@@ -1302,6 +1334,10 @@
 
   let view = "home";
   let reviewKey = null;
+  // True only during the one-time retry window granted after the heart is spent on the
+  // current question — reset at the top of every renderQuestion() call, so it's scoped to
+  // "this specific question", never bleeds into the next one.
+  let heartRetryActive = false;
 
   const now0 = new Date();
   let calYear = now0.getFullYear();
@@ -1311,6 +1347,11 @@
   function showQuiz(){ view = "quiz"; startTimer(); render(); }
 
   backBtn.addEventListener("click", goHome);
+  refreshBtn.addEventListener("click", ()=>{
+    refreshBtn.classList.add("spinning");
+    refreshOnForeground(); // same manual-override path as the automatic foreground refresh
+    setTimeout(()=>refreshBtn.classList.remove("spinning"), 600);
+  });
   settingsBtn.addEventListener("click", ()=>{
     nameInput.value = state.userName;
     syncInput.value = state.pairCode;
@@ -1558,6 +1599,7 @@
         ${ceilingBanner}
         <div class="streak-big">${t("streak")(state.streak)}</div>
         <div class="best-streak">${t("bestStreak")(state.bestStreak)}</div>
+        <div class="heart-status">${state.today.heartUsed ? t("heartStatusUsed") : t("heartStatusAvailable")}</div>
         <div class="badge-row">${badgeRow}</div>
         <button class="${btnClass}" id="startBtn">${btnLabel}</button>
         <p class="hint">${t("hint")}</p>
@@ -1596,7 +1638,10 @@
     if(giveUpBtn){
       giveUpBtn.addEventListener("click", ()=>{
         if(confirm(t("giveUpConfirm"))){
-          state.today = makeFreshToday(state.today.timeSpent);
+          // Preserve heartUsed here (unlike the other makeFreshToday call sites) — quitting
+          // mid-quiz and restarting must NOT refresh the daily heart, or it'd be a loophole
+          // to get unlimited retries by just giving up and starting over each time.
+          state.today = makeFreshToday(state.today.timeSpent, state.today.heartUsed);
           saveState(state);
           render();
         }
@@ -1619,7 +1664,7 @@
         <div class="review-item ${cls}">
           <span class="mark">${mark}</span>
           <div class="qp">
-            <div>${a.prompt}</div>
+            <div>${a.prompt} ${a.heartUsed ? "💔" : ""}</div>
             <div class="ans">${t("yourAnswer")}${a.chosen}${a.correct ? "" : t("correctLabel") + a.correctAnswer}</div>
           </div>
         </div>`;
@@ -1767,6 +1812,7 @@
       return;
     }
 
+    heartRetryActive = false; // a brand-new question — the retry window (if any) applies fresh
     startTimer();
     const q = state.today.items[idx];
     const isListen = q.type === "listen";
@@ -1774,7 +1820,10 @@
       <div class="progress-row">
         <span class="subject-tag ${q.subject==='math'?'math':''}">${q.subject==='math'?t("subjectMath"):t("subjectEn")}</span>
         <span>${idx+1} / ${total}</span>
-        <span class="timer-badge" id="liveTimer">⏱ ${fmtTime(currentElapsedSeconds())}</span>
+        <span style="display:flex; align-items:center; gap:6px;">
+          <span class="heart-badge" id="heartBadge">${state.today.heartUsed ? "💔" : "❤️"}</span>
+          <span class="timer-badge" id="liveTimer">⏱ ${fmtTime(currentElapsedSeconds())}</span>
+        </span>
       </div>
       <div class="question-box">
         <div class="qtext ${q.big?'big':''}">${q.prompt}</div>
@@ -1837,6 +1886,36 @@
   function handleAnswer(q, chosen, btnEl, rowEl){
     sfxClick();
     const correct = (String(chosen) === String(q.answer));
+
+    // One free retry per day: the first time a question is missed (and the heart hasn't
+    // already been spent today), spend it and let him try this SAME question again — don't
+    // record or score this attempt at all. Any question missed after the heart is gone (or a
+    // second miss on the retry itself) scores normally, exactly like before this existed.
+    if(!correct && !heartRetryActive && !state.today.heartUsed){
+      state.today.heartUsed = true;
+      heartRetryActive = true;
+      saveState(state);
+      pushToCloud(); // dad's iPhone should see "heart spent" promptly, not just at day's end
+      const heartEl = document.getElementById("heartBadge");
+      if(heartEl){
+        heartEl.textContent = "💔";
+        heartEl.classList.add("breaking");
+      }
+      Array.from(rowEl.children).forEach(b=>b.disabled = true);
+      if(btnEl) btnEl.classList.add("wrong");
+      sfxWrong();
+      const fb = document.getElementById("feedback");
+      fb.textContent = t("heartUsedFb");
+      fb.className = "feedback bad";
+      setTimeout(()=>{
+        Array.from(rowEl.children).forEach(b=>{ b.disabled = false; b.classList.remove("wrong","correct"); });
+        const confirmBtn = document.getElementById("listenConfirmBtn");
+        if(confirmBtn) confirmBtn.disabled = true; // listen-type: needs a fresh selection before re-enabling
+        fb.textContent = ""; fb.className = "feedback";
+      }, 950);
+      return;
+    }
+
     Array.from(rowEl.children).forEach(b=>b.disabled = true);
     const confirmBtn = document.getElementById("listenConfirmBtn");
     if(confirmBtn) confirmBtn.disabled = true;
@@ -1854,7 +1933,8 @@
 
     state.today.answers.push({
       subject:q.subject, correct,
-      prompt:q.prompt, chosen: String(chosen), correctAnswer: String(q.answer)
+      prompt:q.prompt, chosen: String(chosen), correctAnswer: String(q.answer),
+      heartUsed: heartRetryActive // marks this question for the review page, per your ask
     });
     // Monthly-pack questions are fixed-difficulty recognition content, not part of the
     // adaptive ladder — they still count toward today's score/stars/backpack like any other
