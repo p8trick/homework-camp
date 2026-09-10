@@ -180,6 +180,7 @@
   .home{ text-align:center; }
   .streak-big{ font-size:34px; font-weight:800; margin:6px 0 2px; }
   .best-streak{ font-size:12px; font-weight:700; color:var(--stone); margin-bottom:14px; }
+  .reset-note{ font-size:11px; font-weight:700; color:var(--stone); margin-top:-8px; margin-bottom:14px; opacity:.75; }
   .heart-status{ font-size:13px; font-weight:700; margin-bottom:12px; }
   .badge-row{ display:flex; gap:6px; justify-content:center; flex-wrap:wrap; margin-bottom:16px; }
   .badge-chip{
@@ -198,6 +199,7 @@
     display:inline-block; margin-top:14px; font-size:11px; color:var(--danger);
     text-decoration:underline; background:none; border:none; cursor:pointer; font-weight:700;
   }
+  .giveup-limit{ margin-top:14px; font-size:11px; color:var(--stone); font-weight:700; opacity:.8; }
 
   #pageOverlay{
     position:fixed; inset:0; z-index:100;
@@ -551,11 +553,13 @@
       appTitle:"Daily Camp", appSub:"",
       streak:n=>`🔥 ${n}`,
       bestStreak:n=>`Best streak: ${n} days`,
+      resetCountNote:n=>`↺ Reset ${n} time${n>1?'s':''} today`,
       heartStatusAvailable:"❤️ Heart available today", heartStatusUsed:"💔 Heart used today",
       startBtn:"Start Today", continueBtn:(i,t)=>`Continue (${i}/${t})`,
       doneBtnReview:"Done for today · Review",
       hint:"Tap a day on the calendar to review past practice",
       giveUp:"Give up & get new questions",
+      giveUpLimitReached:"No more resets left for today — let's push through this set 💪",
       giveUpConfirm:"This clears today's progress and gives new questions. Continue?",
       subjectEn:"ENGLISH", subjectMath:"MATH",
       back:"← Home",
@@ -598,11 +602,13 @@
       appTitle:"每日营地", appSub:"DAILY CAMP",
       streak:n=>`🔥 ${n}`,
       bestStreak:n=>`最长连胜：${n} 天`,
+      resetCountNote:n=>`↺ 今天重置了 ${n} 次`,
       heartStatusAvailable:"❤️ 今天还有一颗爱心", heartStatusUsed:"💔 今天的爱心已用掉",
       startBtn:"开始今日练习", continueBtn:(i,t)=>`继续今日练习 (${i}/${t})`,
       doneBtnReview:"今日已完成 · 查看今天的复习",
       hint:"点击日历里的日期可以回顾之前学过的内容",
       giveUp:"放弃本次，重新抽题",
+      giveUpLimitReached:"今天的重置次数已经用完啦，加油完成这一组吧 💪",
       giveUpConfirm:"这会清空今天已做的题，换一批新题。确定吗？",
       subjectEn:"英语 ENGLISH", subjectMath:"数学 MATH",
       back:"← 返回主页",
@@ -642,7 +648,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.16.3";
+  const VERSION = "v2.17.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -682,6 +688,7 @@
   // and expected and resolves itself the moment he levels up.
   const LADDER_CEILING_KEY = "campLadderCeilingSeen_v1";
   const LADDER_CEILING_DAYS = 14;
+  const GIVEUP_DAILY_LIMIT = 3; // how many times "give up & get new questions" can be used per day
   function daysSinceDateStr(dateStr){
     if(!dateStr) return 0;
     const then = new Date(dateStr+"T00:00:00");
@@ -743,6 +750,7 @@
     if(!raw.today.lootSeq) raw.today.lootSeq = rollLootSeq();
     if(raw.today.heartUsed == null) raw.today.heartUsed = false;
     if(raw.today.heartUsedNote === undefined) raw.today.heartUsedNote = null;
+    if(raw.today.giveUpCount == null) raw.today.giveUpCount = 0;
     return raw;
   }
   function saveState(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
@@ -1066,8 +1074,8 @@
   function rollLootSeq(){
     return LOOT_ICONS.slice().sort(()=>Math.random()-0.5).slice(0,10);
   }
-  function makeFreshToday(preserveTimeSpent, preserveHeartUsed, preserveHeartUsedNote){
-    return { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent: preserveTimeSpent||0, lootSeq: rollLootSeq(), heartUsed: !!preserveHeartUsed, heartUsedNote: preserveHeartUsed ? (preserveHeartUsedNote||null) : null };
+  function makeFreshToday(preserveTimeSpent, preserveHeartUsed, preserveHeartUsedNote, preserveGiveUpCount){
+    return { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent: preserveTimeSpent||0, lootSeq: rollLootSeq(), heartUsed: !!preserveHeartUsed, heartUsedNote: preserveHeartUsed ? (preserveHeartUsedNote||null) : null, giveUpCount: preserveGiveUpCount||0 };
   }
   function checkDayRollover(){
     if(state.today.date !== todayStr()){
@@ -1218,7 +1226,7 @@
       // but dad's iPhone needs to see it live, not just after the day completes — so it
       // travels separately, scoped to today's date so a stale payload from a different day
       // never gets misread as "today".
-      todayMeta: { date: state.today.date, heartUsed: !!state.today.heartUsed, heartUsedNote: state.today.heartUsedNote||null }
+      todayMeta: { date: state.today.date, heartUsed: !!state.today.heartUsed, heartUsedNote: state.today.heartUsedNote||null, giveUpCount: state.today.giveUpCount||0 }
     };
   }
   function mergeCloudIntoLocal(cloud){
@@ -1253,6 +1261,13 @@
     }
     if(cloud.meta){
       if((cloud.meta.bestStreak||0) > state.bestStreak) state.bestStreak = cloud.meta.bestStreak;
+      // Badges were being pushed in meta.badges but never actually merged back in — the son's
+      // iPad would earn one (streak just crossed a milestone) and push it, but dad's iPhone
+      // had no code path that read it back out, so it just sat in the cloud doc unused.
+      // Union, never replace: a badge earned on either device stays earned everywhere.
+      if(Array.isArray(cloud.meta.badges)){
+        cloud.meta.badges.forEach(m=>{ if(!state.badges.includes(m)) state.badges.push(m); });
+      }
     }
     if(cloud.todayMeta && cloud.todayMeta.date === state.today.date){
       // OR, never AND: once the heart is spent anywhere, it reads as spent everywhere. A
@@ -1262,6 +1277,11 @@
       // even if a later snapshot from the other device (e.g. after it restarted its own copy
       // of today) comes back without one.
       if(!state.today.heartUsedNote && cloud.todayMeta.heartUsedNote) state.today.heartUsedNote = cloud.todayMeta.heartUsedNote;
+      // giveUpCount is a counter, not a one-way flag, so take the max of the two rather than
+      // OR-ing — this device's own count (if it also has one, e.g. dad testing) shouldn't be
+      // clobbered by a smaller/stale number from the other side, but a bigger real count from
+      // the other device should still win.
+      state.today.giveUpCount = Math.max(state.today.giveUpCount||0, cloud.todayMeta.giveUpCount||0);
     }
     saveState(state);
   }
@@ -1619,11 +1639,16 @@
         ${ceilingBanner}
         <div class="streak-big">${t("streak")(state.streak)}</div>
         <div class="best-streak">${t("bestStreak")(state.bestStreak)}</div>
+        ${state.today.giveUpCount > 0 ? `<div class="reset-note">${t("resetCountNote")(state.today.giveUpCount)}</div>` : ""}
         <div class="heart-status">${state.today.heartUsed ? t("heartStatusUsed") : t("heartStatusAvailable")}</div>
         <div class="badge-row">${badgeRow}</div>
         <button class="${btnClass}" id="startBtn">${btnLabel}</button>
         <p class="hint">${t("hint")}</p>
-        ${(idx > 0 && !todayDone) ? `<button class="giveup-link" id="giveUpBtn">${t("giveUp")}</button>` : ""}
+        ${(idx > 0 && !todayDone) ? (
+          state.today.giveUpCount < GIVEUP_DAILY_LIMIT
+            ? `<button class="giveup-link" id="giveUpBtn">${t("giveUp")}</button>`
+            : `<p class="giveup-limit">${t("giveUpLimitReached")}</p>`
+        ) : ""}
       </div>
     `;
     document.getElementById("startBtn").addEventListener("click", onClick);
@@ -1657,6 +1682,7 @@
     const giveUpBtn = document.getElementById("giveUpBtn");
     if(giveUpBtn){
       giveUpBtn.addEventListener("click", ()=>{
+        if(state.today.giveUpCount >= GIVEUP_DAILY_LIMIT) return; // shouldn't render past the cap, but don't trust that alone
         if(confirm(t("giveUpConfirm"))){
           // Preserve heartUsed here (unlike the other makeFreshToday call sites) — quitting
           // mid-quiz and restarting must NOT refresh the daily heart, or it'd be a loophole
@@ -1664,8 +1690,11 @@
           // preserve heartUsedNote (which question it was spent on): the restart throws away
           // answers[], which is otherwise the only place that's recorded, so without this the
           // review page can show "heart used today" but not say where — see heartUsedNote.
-          state.today = makeFreshToday(state.today.timeSpent, state.today.heartUsed, state.today.heartUsedNote);
+          // giveUpCount +1 and preserved too, so the daily cap (and the "reset N times today"
+          // note) survive across restarts the same way heartUsed does.
+          state.today = makeFreshToday(state.today.timeSpent, state.today.heartUsed, state.today.heartUsedNote, state.today.giveUpCount + 1);
           saveState(state);
+          pushToCloud(); // dad's iPhone should see the reset count live, same reasoning as heartUsed
           render();
         }
       });
