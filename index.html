@@ -648,7 +648,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.17.0";
+  const VERSION = "v2.17.1";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -1514,7 +1514,11 @@
     syncRowLabel.textContent = t("syncRowLabel");
     document.getElementById("syncStatusRow").textContent = t("syncStatus")(syncStatus);
     versionRow.textContent = VERSION;
-    moreRow.textContent = t("moreRow");
+    // Temporary diagnostic (dev device only) for tracking down why badges aren't syncing to
+    // the iPhone — shows what THIS device's own state.badges actually holds right now, so we
+    // can tell "cloud data never arrived / never merged" apart from "it merged fine, the
+    // badge row just isn't rendering it". Safe to remove once that's figured out.
+    moreRow.textContent = t("moreRow") + (isDevDevice ? ` · badges:[${state.badges.join(",")}] sync:${syncStatus}` : "");
 
     const isOverlay = (view === "quiz" || view === "review" || view === "done");
     pageOverlay.classList.toggle("show", isOverlay);
