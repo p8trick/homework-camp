@@ -81,9 +81,12 @@
   .gear-btn.spinning .refresh-icon{
     animation:spinSettle .7s cubic-bezier(0.2,0.8,0.3,1);
   }
-  /* One and a half turns that ease into a stop, instead of a flat linear spin — reads as
-     "finishing the sync", not just spinning forever at constant speed. */
-  @keyframes spinSettle{ from{ transform:rotate(0deg); } to{ transform:rotate(540deg); } }
+  /* Two full turns that ease into a stop, instead of a flat linear spin — reads as
+     "finishing the sync", not just spinning forever at constant speed. Must land on a
+     multiple of 360deg: anything else ends the animation at a visual angle that doesn't
+     match the icon's un-animated rest state, so the moment the "spinning" class comes off
+     (fill-mode defaults to none) it snaps back instead of settling smoothly. */
+  @keyframes spinSettle{ from{ transform:rotate(0deg); } to{ transform:rotate(720deg); } }
   header{ text-align:center; }
   header h1{ font-size:15px; line-height:1.6; margin:0; color:var(--paper); text-shadow:2px 2px 0 var(--night); }
 
@@ -558,6 +561,7 @@
       back:"← Home",
       correctFb:"Found treasure! Correct 💎", wrongFb:"Good try — correct answer shown in green",
       heartUsedFb:"💔 Heart used! Give it one more try",
+      heartUsedNoteLabel:p=>`💔 Heart was used on: ${p} (restarted after, so it's not marked below)`,
       doneTitle:"Camp complete for today!",
       doneScore:(c,t)=>`${c} / ${t} correct`,
       timeSpent:s=>`Time spent: ${s}`,
@@ -604,6 +608,7 @@
       back:"← 返回主页",
       correctFb:"挖到宝了！答对啦 💎", wrongFb:"再想想～正确答案已标绿",
       heartUsedFb:"💔 用掉一颗爱心！再试一次",
+      heartUsedNoteLabel:p=>`💔 爱心用在了这道题上：${p}（之后重新抽题了，所以下面列表里标不出来）`,
       doneTitle:"今天的营地任务完成啦！",
       doneScore:(c,t)=>`答对 ${c} / ${t} 题`,
       timeSpent:s=>`用时：${s}`,
@@ -637,7 +642,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.16.2";
+  const VERSION = "v2.16.3";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -737,6 +742,7 @@
     if(!raw.maxLevelSince) raw.maxLevelSince = { en:null, math:null };
     if(!raw.today.lootSeq) raw.today.lootSeq = rollLootSeq();
     if(raw.today.heartUsed == null) raw.today.heartUsed = false;
+    if(raw.today.heartUsedNote === undefined) raw.today.heartUsedNote = null;
     return raw;
   }
   function saveState(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
@@ -1060,8 +1066,8 @@
   function rollLootSeq(){
     return LOOT_ICONS.slice().sort(()=>Math.random()-0.5).slice(0,10);
   }
-  function makeFreshToday(preserveTimeSpent, preserveHeartUsed){
-    return { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent: preserveTimeSpent||0, lootSeq: rollLootSeq(), heartUsed: !!preserveHeartUsed };
+  function makeFreshToday(preserveTimeSpent, preserveHeartUsed, preserveHeartUsedNote){
+    return { date: todayStr(), items: buildTodaySet(), answers: [], timeSpent: preserveTimeSpent||0, lootSeq: rollLootSeq(), heartUsed: !!preserveHeartUsed, heartUsedNote: preserveHeartUsed ? (preserveHeartUsedNote||null) : null };
   }
   function checkDayRollover(){
     if(state.today.date !== todayStr()){
@@ -1212,7 +1218,7 @@
       // but dad's iPhone needs to see it live, not just after the day completes — so it
       // travels separately, scoped to today's date so a stale payload from a different day
       // never gets misread as "today".
-      todayMeta: { date: state.today.date, heartUsed: !!state.today.heartUsed }
+      todayMeta: { date: state.today.date, heartUsed: !!state.today.heartUsed, heartUsedNote: state.today.heartUsedNote||null }
     };
   }
   function mergeCloudIntoLocal(cloud){
@@ -1252,6 +1258,10 @@
       // OR, never AND: once the heart is spent anywhere, it reads as spent everywhere. A
       // stale "not yet used" from the other device must never un-consume it locally.
       state.today.heartUsed = state.today.heartUsed || !!cloud.todayMeta.heartUsed;
+      // Same idea for the note on which question it was spent on: adopt it once, keep it
+      // even if a later snapshot from the other device (e.g. after it restarted its own copy
+      // of today) comes back without one.
+      if(!state.today.heartUsedNote && cloud.todayMeta.heartUsedNote) state.today.heartUsedNote = cloud.todayMeta.heartUsedNote;
     }
     saveState(state);
   }
@@ -1566,7 +1576,12 @@
   function renderHome(){
     const idx = state.today.answers.length;
     const total = state.today.items.length;
-    const todayDone = idx >= total;
+    // Don't trust local progress alone: state.today is per-device and never synced, only
+    // completed days (state.history) are. If the other device finished today and that
+    // synced in, this device's own state.today can still show 0 answers — checking history
+    // too is what makes dad's iPhone correctly show "Review" instead of "Start Today" after
+    // the son finishes on the iPad.
+    const todayDone = idx >= total || !!(state.history[todayStr()] && state.history[todayStr()].done);
     let btnLabel, btnClass = "primary-btn", onClick;
 
     if(todayDone){
@@ -1645,8 +1660,11 @@
         if(confirm(t("giveUpConfirm"))){
           // Preserve heartUsed here (unlike the other makeFreshToday call sites) — quitting
           // mid-quiz and restarting must NOT refresh the daily heart, or it'd be a loophole
-          // to get unlimited retries by just giving up and starting over each time.
-          state.today = makeFreshToday(state.today.timeSpent, state.today.heartUsed);
+          // to get unlimited retries by just giving up and starting over each time. Also
+          // preserve heartUsedNote (which question it was spent on): the restart throws away
+          // answers[], which is otherwise the only place that's recorded, so without this the
+          // review page can show "heart used today" but not say where — see heartUsedNote.
+          state.today = makeFreshToday(state.today.timeSpent, state.today.heartUsed, state.today.heartUsedNote);
           saveState(state);
           render();
         }
@@ -1658,7 +1676,8 @@
     const isTodayLive = key === todayStr() && !(state.history[key]);
     const record = isTodayLive
       ? { correct: state.today.answers.filter(a=>a.correct).length, items: state.today.answers, timeSpent: state.today.timeSpent,
-          stars: getStars(state.today.answers.filter(a=>a.correct).length, state.today.items.length||10), completedAt: null }
+          stars: getStars(state.today.answers.filter(a=>a.correct).length, state.today.items.length||10), completedAt: null,
+          heartUsedNote: (state.today.heartUsed && !state.today.answers.some(a=>a.heartUsed)) ? (state.today.heartUsedNote||null) : null }
       : state.history[key];
     if(!record){ goHome(); return; }
     const total = (record.items||[]).length || 10;
@@ -1688,11 +1707,15 @@
             ? `<div class="review-time">${t("dadReactionLabel")} <span style="font-size:20px; vertical-align:middle;">${record.reaction.emoji}</span></div>`
             : "")
     );
+    const heartNoteRow = record.heartUsedNote
+      ? `<div class="review-time">${t("heartUsedNoteLabel")(record.heartUsedNote.prompt)}</div>`
+      : "";
     overlayCard.innerHTML = `
       <div class="review-summary">${key} · ${t("doneScore")(record.correct, total)}</div>
       <div class="stars-line">${starsHtml(record.stars||0)}</div>
       <div class="review-time">${t("timeSpent")(fmtTime(record.timeSpent||0))}</div>
       <div class="review-time">${t("completedAt")(fmtClock(record.completedAt))}</div>
+      ${heartNoteRow}
       ${reactionRow}
       <div class="review-list">${rows || `<p>${t("noRecord")}</p>`}</div>
     `;
@@ -1717,10 +1740,16 @@
     const correctCount = state.today.answers.filter(a=>a.correct).length;
     const total = state.today.items.length;
     const nowMs = Date.now();
+    // If today's heart was spent on a question that isn't in this finished answers[] (e.g. he
+    // used it, then gave up and restarted — see the giveUpBtn handler), answers[] alone can't
+    // show which question it was. heartUsedNote is the fallback carried over from that earlier
+    // attempt so review can still say where it went, even though no single item is flagged.
+    const heartOnRecordedItem = state.today.answers.some(a=>a.heartUsed);
     state.history[key] = {
       done:true, correct: correctCount, items: state.today.answers.slice(),
       timeSpent: state.today.timeSpent||0, stars: getStars(correctCount, total),
-      completedAt: nowMs
+      completedAt: nowMs,
+      heartUsedNote: (state.today.heartUsed && !heartOnRecordedItem) ? (state.today.heartUsedNote||null) : null
     };
     const y = new Date(); y.setDate(y.getDate()-1);
     const yKey = keyOf(y);
@@ -1898,6 +1927,7 @@
     // second miss on the retry itself) scores normally, exactly like before this existed.
     if(!correct && !heartRetryActive && !state.today.heartUsed){
       state.today.heartUsed = true;
+      state.today.heartUsedNote = { prompt: q.prompt, subject: q.subject };
       heartRetryActive = true;
       saveState(state);
       pushToCloud(); // dad's iPhone should see "heart spent" promptly, not just at day's end
