@@ -648,7 +648,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.17.2";
+  const VERSION = "v2.17.3";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -1221,13 +1221,26 @@
   function cloudPayloadFromLocal(){
     return {
       days: state.history,
-      meta: { streak: state.streak, bestStreak: state.bestStreak, badges: state.badges },
+      // badgeSet, not just badges: Firestore's setDoc(...,{merge:true}) deep-merges nested MAP
+      // fields key-by-key, but an array field is always replaced wholesale by whatever the
+      // pushing device sends — never unioned. That's exactly why badges weren't syncing: any
+      // push (from either device, for any reason — a heart used, a reaction tapped, anything)
+      // sends its own local `badges` array and silently overwrites the other device's earned
+      // badges in the cloud if it doesn't happen to know about them yet. badgeSet is a map of
+      // milestone -> true instead of an array, so every push can only ever ADD a key; it can
+      // never remove or replace one the other device already wrote, regardless of push order.
+      meta: { streak: state.streak, bestStreak: state.bestStreak, badges: state.badges, badgeSet: badgeSetFromArray(state.badges) },
       // Today's heart status isn't part of `days` (that only gets a day once it's finished),
       // but dad's iPhone needs to see it live, not just after the day completes — so it
       // travels separately, scoped to today's date so a stale payload from a different day
       // never gets misread as "today".
       todayMeta: { date: state.today.date, heartUsed: !!state.today.heartUsed, heartUsedNote: state.today.heartUsedNote||null, giveUpCount: state.today.giveUpCount||0 }
     };
+  }
+  function badgeSetFromArray(arr){
+    const o = {};
+    arr.forEach(m=>{ o[m] = true; });
+    return o;
   }
   function mergeCloudIntoLocal(cloud){
     if(!cloud) return;
@@ -1261,11 +1274,15 @@
     }
     if(cloud.meta){
       if((cloud.meta.bestStreak||0) > state.bestStreak) state.bestStreak = cloud.meta.bestStreak;
-      // Badges were being pushed in meta.badges but never actually merged back in — the son's
-      // iPad would earn one (streak just crossed a milestone) and push it, but dad's iPhone
-      // had no code path that read it back out, so it just sat in the cloud doc unused.
-      // Union, never replace: a badge earned on either device stays earned everywhere.
-      if(Array.isArray(cloud.meta.badges)){
+      // Read badgeSet (the map), not the legacy badges array — see the comment in
+      // cloudPayloadFromLocal for why the array can't be trusted for merging. Fall back to
+      // the array only for a cloud doc written by a version old enough to predate badgeSet.
+      if(cloud.meta.badgeSet && typeof cloud.meta.badgeSet === "object"){
+        Object.keys(cloud.meta.badgeSet).forEach(k=>{
+          const m = Number(k);
+          if(!state.badges.includes(m)) state.badges.push(m);
+        });
+      } else if(Array.isArray(cloud.meta.badges)){
         cloud.meta.badges.forEach(m=>{ if(!state.badges.includes(m)) state.badges.push(m); });
       }
     }
@@ -1392,7 +1409,14 @@
   backBtn.addEventListener("click", goHome);
   refreshBtn.addEventListener("click", ()=>{
     refreshBtn.classList.add("spinning");
-    refreshOnForeground(); // same manual-override path as the automatic foreground refresh
+    // Explicit push here (unlike the automatic visibilitychange/pageshow/focus-triggered
+    // refreshOnForeground, which stays pull-only so it doesn't fire a write on every brief
+    // backgrounding) — tapping the button is a deliberate "sync now" gesture, and pushing
+    // this device's current state is what actually gets e.g. already-earned badges that
+    // predate a data-model change (like badgeSet) into the cloud doc, instead of waiting on
+    // the next quiz completion to trigger a push naturally.
+    pushToCloud();
+    refreshOnForeground();
     setTimeout(()=>refreshBtn.classList.remove("spinning"), 700);
   });
   settingsBtn.addEventListener("click", ()=>{
