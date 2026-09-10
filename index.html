@@ -483,6 +483,11 @@
       <span id="resetTodayLabel">Reset today's progress</span>
       <button id="resetTodayBtn">↺</button>
     </div>
+    <div class="settings-row" id="challengeTimerRow">
+      <span id="challengeTimerLabel">Challenge Lv1 seconds</span>
+      <input type="number" id="challengeTimerInput" min="3" max="60" step="1" style="width:70px;">
+    </div>
+    <div class="settings-row muted" id="challengeTimerHint"></div>
     <div class="settings-row muted" id="versionRow"></div>
     <div class="settings-row muted" id="moreRow"></div>
     <button class="modal-close" id="closeSettings">Close</button>
@@ -629,6 +634,8 @@
       testModeOnConfirm:"Switch to Test Mode? This reloads the app into a separate, isolated practice profile.",
       testModeOffConfirm:"Switch back to the real profile? This reloads the app.",
       resetTodayLabel:"Reset today's progress", resetTodayConfirm:"This clears today's completed practice (in this profile) and generates a fresh set. Use this to undo an accidental completion. Continue?",
+      challengeTimerLabel:"Challenge Lv1 seconds",
+      challengeTimerHint:"Levels 2–6 scale with this automatically. Syncs to both devices right away.",
       listenInstructions:"Tap to listen — pick the one that matches, then confirm",
       confirmLabel:"Confirm",
       syncConfirmWarningChange:code=>`Change the sync code to "${code}"? This device will stop syncing with the current pairing until reconnected, and won't receive or send updates in between.`,
@@ -691,6 +698,8 @@
       testModeOnConfirm:"切换到测试模式？会重新加载页面，进入一份独立、隔离的测试档案。",
       testModeOffConfirm:"切换回真实档案？会重新加载页面。",
       resetTodayLabel:"重置今天的进度", resetTodayConfirm:"这会清空当前档案里今天已完成的练习（换一批新题）。用来撤销误操作的完成记录。确定吗？",
+      challengeTimerLabel:"挑战模式 Lv1 秒数",
+      challengeTimerHint:"2-6级会按比例自动跟着调整，设置后立即同步两台设备。",
       listenInstructions:"点一点听发音——选出跟单词对应的那个，再确认",
       confirmLabel:"确认",
       syncConfirmWarningChange:code=>`确定要把同步码改成"${code}"吗？这台设备会与当前配对断开，直到重新连接——期间不会收发任何更新。`,
@@ -699,7 +708,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v3.0.5";
+  const VERSION = "v3.1.1";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -742,7 +751,14 @@
   const GIVEUP_DAILY_LIMIT = 3; // how many times "give up & get new questions" can be used per day
   const CHALLENGE_HEARTS = 3;
   const CHALLENGE_STREAK_TO_LEVELUP = 4; // consecutive correct answers needed to bump difficulty
-  const CHALLENGE_TIME_FOR_LEVEL = {1:18, 2:18, 3:16, 4:14, 5:12, 6:10}; // seconds per question, by math level — generous at low levels for finger-counting, tightens gradually
+  // Ratios preserve the original tuned relationship between levels (generous at low levels
+  // for finger-counting, tightens gradually) — only the Lv1 baseline is user-adjustable
+  // (Settings, dad's device only), and every other level scales proportionally off it.
+  const CHALLENGE_TIME_RATIOS = {1:1, 2:1, 3:16/18, 4:14/18, 5:12/18, 6:10/18};
+  function challengeTimeForLevel(level){
+    const base = state.challengeTimeBase || 18;
+    return Math.max(1, Math.round(base * CHALLENGE_TIME_RATIOS[level]));
+  }
   function daysSinceDateStr(dateStr){
     if(!dateStr) return 0;
     const then = new Date(dateStr+"T00:00:00");
@@ -799,6 +815,7 @@
     // value back in). This one just doesn't participate in sync in either direction, so it
     // can never appear on the iPad and never collide with the real record.
     if(!raw.devTestBest) raw.devTestBest = { level: 0, correct: 0 };
+    if(raw.challengeTimeBase == null) raw.challengeTimeBase = 18; // Lv1 seconds; Lv2-6 scale off CHALLENGE_TIME_RATIOS
     if(!raw.levelShiftV3Applied){
       // v2.8.0 inserted a new tier into both level ladders (math: within-20 becomes level 3;
       // english: blends/CVCe becomes level 5), pushing what used to be level 3+ up by one.
@@ -1306,7 +1323,11 @@
       ...(isDevDevice ? {} : {
         challengeBest: state.challengeBest,
         challengeToday: state.challengeToday
-      })
+      }),
+      // The reverse of the block above: this setting is only ever pushed FROM dad's iPhone
+      // (the only device with the UI to change it) — the iPad never sends this field at all,
+      // so it can never overwrite dad's setting with its own stale local copy.
+      ...(isDevDevice ? { challengeTimeBase: state.challengeTimeBase } : {})
     };
   }
   function badgeSetFromArray(arr){
@@ -1381,6 +1402,11 @@
     if(cloud.challengeToday && cloud.challengeToday.date === state.challengeToday.date
        && isBetterRun(cloud.challengeToday, state.challengeToday)){
       state.challengeToday = { date: state.challengeToday.date, level: cloud.challengeToday.level||0, correct: cloud.challengeToday.correct||0 };
+    }
+    // Single-writer setting (only dad's iPhone ever pushes it — see cloudPayloadFromLocal),
+    // so a plain overwrite is correct here, not a merge/comparison like the fields above.
+    if(cloud.challengeTimeBase != null && cloud.challengeTimeBase !== state.challengeTimeBase){
+      state.challengeTimeBase = cloud.challengeTimeBase;
     }
     saveState(state);
   }
@@ -1467,11 +1493,16 @@
   const testModeToggle = document.getElementById("testModeToggle");
   const resetTodayLabel = document.getElementById("resetTodayLabel");
   const resetTodayBtn = document.getElementById("resetTodayBtn");
+  const challengeTimerLabel = document.getElementById("challengeTimerLabel");
+  const challengeTimerHint = document.getElementById("challengeTimerHint");
+  const challengeTimerInput = document.getElementById("challengeTimerInput");
   if(!isDevDevice){
     // Not dad's iPhone — the son's iPad should look like a clean, untouchable kid-mode app.
     document.getElementById("testModeRow").style.display = "none";
     document.getElementById("testModeHint").style.display = "none";
     document.getElementById("resetTodayRow").style.display = "none";
+    document.getElementById("challengeTimerRow").style.display = "none";
+    document.getElementById("challengeTimerHint").style.display = "none";
   }
 
   let view = "home";
@@ -1533,6 +1564,17 @@
       settingsModal.classList.remove("show");
     }
   });
+  if(challengeTimerInput){
+    challengeTimerInput.addEventListener("change", ()=>{
+      let v = parseInt(challengeTimerInput.value, 10);
+      if(isNaN(v)) v = state.challengeTimeBase;
+      v = Math.min(60, Math.max(3, v)); // clamp to the agreed 3–60s range
+      challengeTimerInput.value = v;
+      state.challengeTimeBase = v;
+      saveState(state);
+      pushToCloud(); // "设置好后马上同步云端" — no debounce, push on every committed change
+    });
+  }
   closeSettings.addEventListener("click", ()=>{ hideSyncConfirm(); settingsModal.classList.remove("show"); });
   settingsModal.addEventListener("click", (e)=>{ if(e.target===settingsModal){ hideSyncConfirm(); settingsModal.classList.remove("show"); } });
   nameInput.addEventListener("input", ()=>{
@@ -1629,6 +1671,11 @@
     testModeLabel.textContent = t("testModeLabel");
     testModeHint.textContent = t("testModeHint");
     resetTodayLabel.textContent = t("resetTodayLabel");
+    if(challengeTimerLabel){
+      challengeTimerLabel.textContent = t("challengeTimerLabel");
+      challengeTimerHint.textContent = t("challengeTimerHint");
+      if(document.activeElement !== challengeTimerInput) challengeTimerInput.value = state.challengeTimeBase;
+    }
     testBanner.textContent = t("testBannerText");
     document.body.classList.toggle("test-mode", isTestMode());
     nameRowLabel.textContent = t("nameRowLabel");
@@ -2213,7 +2260,7 @@
   function startChallenge(){
     challengeRun = {
       level: 1, correctStreak: 0, correct: 0, heartsLeft: CHALLENGE_HEARTS,
-      question: genChallengeQuestion(1), timeLeft: CHALLENGE_TIME_FOR_LEVEL[1],
+      question: genChallengeQuestion(1), timeLeft: challengeTimeForLevel(1),
       ended: false, newRecord: false, isTestRun: false
     };
     view = "challenge";
@@ -2316,7 +2363,7 @@
     setTimeout(()=>{
       if(!challengeRun || challengeRun.ended) return; // could have been ended by backgrounding during the pause
       challengeRun.question = genChallengeQuestion(challengeRun.level);
-      challengeRun.timeLeft = CHALLENGE_TIME_FOR_LEVEL[challengeRun.level];
+      challengeRun.timeLeft = challengeTimeForLevel(challengeRun.level);
       renderChallenge();
     }, 950);
   }
