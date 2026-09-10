@@ -190,6 +190,7 @@
   }
   .challenge-again-btn:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 rgba(0,0,0,.25); }
   .challenge-stats{ text-align:center; font-size:11px; color:var(--stone); font-weight:700; margin-top:8px; }
+  .challenge-stats.dev-only{ font-style:italic; opacity:.75; }
 
   .backpack{
     width:100%; max-width:480px; background:var(--dirt); border:4px solid var(--ink);
@@ -605,6 +606,7 @@
       newBadge:label=>`🎉 New badge unlocked: ${label}!`,
       badgeLabel:m=>`${m}-Day Streak`,
       challengeEntry:"⚡ Challenge Mode", challengeLocked:"⚡ Finish today to unlock",
+      challengeDevUnlockNote:"Unlocked here for testing — the iPad still needs today's practice done",
       challengeStatsLine:(bl,bc,tl,tc)=>`Best: Lv${bl}·${bc} · Today: Lv${tl}·${tc}`,
       challengeLevelLabel:lvl=>`Level ${lvl}`,
       challengeTimeUp:"⏱ Time's up! Next question",
@@ -613,6 +615,7 @@
       challengeTodayBest:(lvl,correct)=>`Today's best: Level ${lvl} · ${correct} correct`,
       challengeAllTimeBest:(lvl,correct)=>`All-time best: Level ${lvl} · ${correct} correct`,
       challengeTestRunNote:"Test run on dad's device — not saved to the record",
+      challengeDevTestBest:(lvl,correct)=>`This device's test best: Lv${lvl}·${correct}`,
       challengeNewRecord:"🎉 New all-time record!",
       challengeAgain:"⚡ Play Again",
       reactionBanner:(date,emoji)=>`${emoji} Dad cheered for your ${date} practice!`,
@@ -665,6 +668,7 @@
       newBadge:label=>`🎉 解锁新徽章：${label}！`,
       badgeLabel:m=>`连胜 ${m} 天`,
       challengeEntry:"⚡ 挑战模式", challengeLocked:"⚡ 挑战模式 — 完成今天练习后解锁",
+      challengeDevUnlockNote:"这台设备测试用，不受限制 — iPad那边还是要先完成今天练习",
       challengeStatsLine:(bl,bc,tl,tc)=>`历史最佳：第${bl}级·${bc}题 · 今天：第${tl}级·${tc}题`,
       challengeLevelLabel:lvl=>`第 ${lvl} 级`,
       challengeTimeUp:"⏱ 时间到！下一题",
@@ -673,6 +677,7 @@
       challengeTodayBest:(lvl,correct)=>`今天最好：第 ${lvl} 级 · 答对 ${correct} 题`,
       challengeAllTimeBest:(lvl,correct)=>`历史最佳：第 ${lvl} 级 · 答对 ${correct} 题`,
       challengeTestRunNote:"爸爸设备上的测试局，不计入战绩",
+      challengeDevTestBest:(lvl,correct)=>`本机测试最佳：第${lvl}级·${correct}题`,
       challengeNewRecord:"🎉 刷新历史最佳！",
       challengeAgain:"⚡ 再来一局",
       reactionBanner:(date,emoji)=>`${emoji} 爸爸给 ${date} 的练习点赞啦！`,
@@ -694,7 +699,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v3.0.2";
+  const VERSION = "v3.0.5";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -788,6 +793,12 @@
     if(raw.lastAppliedResetTs == null) raw.lastAppliedResetTs = 0;
     if(!raw.challengeBest) raw.challengeBest = { level: 0, correct: 0 };
     if(!raw.challengeToday || raw.challengeToday.date !== todayStr()) raw.challengeToday = { date: todayStr(), level: 0, correct: 0 };
+    // Dev-device-only, purely local: never read from or written to cloudPayloadFromLocal/
+    // mergeCloudIntoLocal at all — this is deliberately NOT the same mechanism as
+    // challengeBest's "push skipped on dev device" (that one still reads the real synced
+    // value back in). This one just doesn't participate in sync in either direction, so it
+    // can never appear on the iPad and never collide with the real record.
+    if(!raw.devTestBest) raw.devTestBest = { level: 0, correct: 0 };
     if(!raw.levelShiftV3Applied){
       // v2.8.0 inserted a new tier into both level ladders (math: within-20 becomes level 3;
       // english: blends/CVCe becomes level 5), pushing what used to be level 3+ up by one.
@@ -1289,7 +1300,7 @@
       todayMeta: { date: state.today.date, heartUsed: !!state.today.heartUsed, heartUsedNote: state.today.heartUsedNote||null, giveUpCount: state.today.giveUpCount||0 },
       // Challenge Mode results are deliberately left out of every push from the dev device
       // (iPhone) — dad uses it to test balance/bugs, and a random adult test run could easily
-      // beat 小乔治's real best, which would make the record permanently unreachable for him
+      // beat the real best, which would make the record permanently unreachable for him
       // and defeat the point of tracking it. Omitting the fields entirely (rather than pushing
       // zeros) means a push from iPhone can never overwrite what's already in the cloud either.
       ...(isDevDevice ? {} : {
@@ -1763,12 +1774,17 @@
             ? `<button class="giveup-link" id="giveUpBtn">${t("giveUp")}</button>`
             : `<p class="giveup-limit">${t("giveUpLimitReached")}</p>`
         ) : ""}
-        ${todayDone
+        ${(todayDone || isDevDevice)
           ? `<button class="challenge-entry-btn" id="challengeEntryBtn">${t("challengeEntry")}</button>`
           : `<p class="challenge-entry-btn locked">${t("challengeLocked")}</p>`
         }
+        ${(isDevDevice && !todayDone) ? `<p class="challenge-stats">${t("challengeDevUnlockNote")}</p>` : ""}
         ${state.challengeBest.level > 0
           ? `<p class="challenge-stats">${t("challengeStatsLine")(state.challengeBest.level, state.challengeBest.correct, state.challengeToday.level, state.challengeToday.correct)}</p>`
+          : ""
+        }
+        ${(isDevDevice && state.devTestBest.level > 0)
+          ? `<p class="challenge-stats dev-only">${t("challengeDevTestBest")(state.devTestBest.level, state.devTestBest.correct)}</p>`
           : ""
         }
       </div>
@@ -2312,9 +2328,8 @@
     challengeRun.reason = reason;
     const result = { level: challengeRun.level, correct: challengeRun.correct };
     challengeRun.isTestRun = isDevDevice;
-    // Dad's device never writes a challenge result at all (see cloudPayloadFromLocal for why)
-    // — a test run only ever shows in that run's own results screen, then is gone.
     if(!isDevDevice){
+      // The real, synced record — the iPad's actual results only.
       if(isBetterChallengeRun(result, state.challengeToday)){
         state.challengeToday = { date: todayStr(), level: result.level, correct: result.correct };
       }
@@ -2322,6 +2337,13 @@
       if(challengeRun.newRecord) state.challengeBest = { level: result.level, correct: result.correct };
       saveState(state);
       pushToCloud();
+    } else {
+      // A separate, local-only "how'd that build handle it" number for dad's own repeated
+      // testing — see devTestBest's comment in loadState() for why this never touches sync.
+      if(isBetterChallengeRun(result, state.devTestBest)){
+        state.devTestBest = { level: result.level, correct: result.correct };
+      }
+      saveState(state);
     }
     if(view === "challenge") render();
   }
@@ -2334,7 +2356,7 @@
         <h2>${t("challengeDoneTitle")}</h2>
         <p>${t("challengeResultLine")(r.level, r.correct)}</p>
         ${r.isTestRun
-          ? `<p class="review-time">${t("challengeTestRunNote")}</p>`
+          ? `<p class="review-time">${t("challengeTestRunNote")}<br>${t("challengeDevTestBest")(state.devTestBest.level, state.devTestBest.correct)}</p>`
           : `<p class="review-time">${t("challengeTodayBest")(state.challengeToday.level, state.challengeToday.correct)}<br>${t("challengeAllTimeBest")(state.challengeBest.level, state.challengeBest.correct)}</p>`
         }
         ${r.newRecord ? `<div class="badge-banner">${t("challengeNewRecord")}</div>` : ""}
