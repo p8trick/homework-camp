@@ -169,6 +169,27 @@
   .feedback{ text-align:center; min-height:26px; font-weight:800; font-size:15px; margin-top:10px; }
   .feedback.good{color:var(--grass-dark);} .feedback.bad{color:var(--danger);}
 
+  .challenge-hearts{ font-size:17px; letter-spacing:2px; }
+  .challenge-timer-big{
+    text-align:center; font-size:44px; font-weight:800; color:var(--night);
+    margin:6px 0 0;
+  }
+  .challenge-timer-big.urgent{ color:var(--danger); animation:urgentPulse .5s ease infinite; }
+  @keyframes urgentPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.15); } }
+  .challenge-entry-btn{
+    display:block; width:100%; margin-top:10px; padding:10px; font-size:13px; font-weight:800;
+    font-family:'Baloo 2', sans-serif; background:var(--paper); color:var(--night);
+    border:2px solid var(--ink); box-shadow:3px 3px 0 rgba(0,0,0,.25); cursor:pointer;
+  }
+  .challenge-entry-btn:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 rgba(0,0,0,.25); }
+  .challenge-entry-btn.locked{ opacity:.6; cursor:default; box-shadow:none; }
+  .challenge-again-btn{
+    display:inline-block; margin-top:16px; padding:10px 20px; font-size:14px; font-weight:800;
+    font-family:'Baloo 2', sans-serif; background:var(--gold); border:3px solid var(--ink);
+    box-shadow:3px 3px 0 rgba(0,0,0,.25); cursor:pointer;
+  }
+  .challenge-again-btn:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 rgba(0,0,0,.25); }
+
   .backpack{
     width:100%; max-width:480px; background:var(--dirt); border:4px solid var(--ink);
     box-shadow:6px 6px 0 rgba(0,0,0,.3); padding:12px 14px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
@@ -377,6 +398,8 @@
     .done p{ font-size:16px; }
     .stars-line{ font-size:34px; }
     .badge-banner{ font-size:14px; }
+    .challenge-timer-big{ font-size:64px; }
+    .challenge-hearts{ font-size:24px; }
   }
 
   /* Extra headroom on bigger iPads (Air/Pro 11"+ landscape) — same composition, a bit more
@@ -580,6 +603,16 @@
       greeting:name => name ? `Welcome back, ${name}!` : "Welcome back!",
       newBadge:label=>`🎉 New badge unlocked: ${label}!`,
       badgeLabel:m=>`${m}-Day Streak`,
+      challengeEntry:"⚡ Challenge Mode", challengeLocked:"⚡ Challenge Mode — finish today's practice to unlock",
+      challengeLevelLabel:lvl=>`Level ${lvl}`,
+      challengeTimeUp:"⏱ Time's up! Next question",
+      challengeDoneTitle:"Challenge over!",
+      challengeResultLine:(lvl,correct)=>`Reached Level ${lvl} · ${correct} correct`,
+      challengeTodayBest:(lvl,correct)=>`Today's best: Level ${lvl} · ${correct} correct`,
+      challengeAllTimeBest:(lvl,correct)=>`All-time best: Level ${lvl} · ${correct} correct`,
+      challengeTestRunNote:"Test run on dad's device — not saved to the record",
+      challengeNewRecord:"🎉 New all-time record!",
+      challengeAgain:"⚡ Play Again",
       reactionBanner:(date,emoji)=>`${emoji} Dad cheered for your ${date} practice!`,
       monthReminderBanner:"📅 This month is wrapping up. No rush — if you get a spare moment, updating this month's bonus content with Claude is a nice-to-have, not a must.",
       subjectNameEn:"English", subjectNameMath:"Math", andWord:" and ",
@@ -629,6 +662,16 @@
       greeting:name => name ? `欢迎回来${name}` : "欢迎回来",
       newBadge:label=>`🎉 解锁新徽章：${label}！`,
       badgeLabel:m=>`连胜 ${m} 天`,
+      challengeEntry:"⚡ 挑战模式", challengeLocked:"⚡ 挑战模式 — 完成今天练习后解锁",
+      challengeLevelLabel:lvl=>`第 ${lvl} 级`,
+      challengeTimeUp:"⏱ 时间到！下一题",
+      challengeDoneTitle:"挑战结束！",
+      challengeResultLine:(lvl,correct)=>`到达第 ${lvl} 级 · 答对 ${correct} 题`,
+      challengeTodayBest:(lvl,correct)=>`今天最好：第 ${lvl} 级 · 答对 ${correct} 题`,
+      challengeAllTimeBest:(lvl,correct)=>`历史最佳：第 ${lvl} 级 · 答对 ${correct} 题`,
+      challengeTestRunNote:"爸爸设备上的测试局，不计入战绩",
+      challengeNewRecord:"🎉 刷新历史最佳！",
+      challengeAgain:"⚡ 再来一局",
       reactionBanner:(date,emoji)=>`${emoji} 爸爸给 ${date} 的练习点赞啦！`,
       monthReminderBanner:"📅 这个月快过完了。不着急——有空的话可以找Claude更新一下这个月的加分内容，没空跳过也完全没关系。",
       subjectNameEn:"英语", subjectNameMath:"数学", andWord:"和",
@@ -648,7 +691,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.17.3";
+  const VERSION = "v3.0.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -689,6 +732,9 @@
   const LADDER_CEILING_KEY = "campLadderCeilingSeen_v1";
   const LADDER_CEILING_DAYS = 14;
   const GIVEUP_DAILY_LIMIT = 3; // how many times "give up & get new questions" can be used per day
+  const CHALLENGE_HEARTS = 3;
+  const CHALLENGE_STREAK_TO_LEVELUP = 4; // consecutive correct answers needed to bump difficulty
+  const CHALLENGE_TIME_FOR_LEVEL = {1:12, 2:12, 3:10, 4:10, 5:8, 6:8}; // seconds per question, by math level
   function daysSinceDateStr(dateStr){
     if(!dateStr) return 0;
     const then = new Date(dateStr+"T00:00:00");
@@ -737,6 +783,8 @@
     if(!raw.reactions) raw.reactions = {};
     if(!raw.seenReactionKeys) raw.seenReactionKeys = [];
     if(raw.lastAppliedResetTs == null) raw.lastAppliedResetTs = 0;
+    if(!raw.challengeBest) raw.challengeBest = { level: 0, correct: 0 };
+    if(!raw.challengeToday || raw.challengeToday.date !== todayStr()) raw.challengeToday = { date: todayStr(), level: 0, correct: 0 };
     if(!raw.levelShiftV3Applied){
       // v2.8.0 inserted a new tier into both level ladders (math: within-20 becomes level 3;
       // english: blends/CVCe becomes level 5), pushing what used to be level 3+ up by one.
@@ -1080,6 +1128,7 @@
   function checkDayRollover(){
     if(state.today.date !== todayStr()){
       state.today = makeFreshToday();
+      state.challengeToday = { date: todayStr(), level: 0, correct: 0 };
       saveState(state);
       return true;
     }
@@ -1234,7 +1283,16 @@
       // but dad's iPhone needs to see it live, not just after the day completes — so it
       // travels separately, scoped to today's date so a stale payload from a different day
       // never gets misread as "today".
-      todayMeta: { date: state.today.date, heartUsed: !!state.today.heartUsed, heartUsedNote: state.today.heartUsedNote||null, giveUpCount: state.today.giveUpCount||0 }
+      todayMeta: { date: state.today.date, heartUsed: !!state.today.heartUsed, heartUsedNote: state.today.heartUsedNote||null, giveUpCount: state.today.giveUpCount||0 },
+      // Challenge Mode results are deliberately left out of every push from the dev device
+      // (iPhone) — dad uses it to test balance/bugs, and a random adult test run could easily
+      // beat 小乔治's real best, which would make the record permanently unreachable for him
+      // and defeat the point of tracking it. Omitting the fields entirely (rather than pushing
+      // zeros) means a push from iPhone can never overwrite what's already in the cloud either.
+      ...(isDevDevice ? {} : {
+        challengeBest: state.challengeBest,
+        challengeToday: state.challengeToday
+      })
     };
   }
   function badgeSetFromArray(arr){
@@ -1299,6 +1357,16 @@
       // clobbered by a smaller/stale number from the other side, but a bigger real count from
       // the other device should still win.
       state.today.giveUpCount = Math.max(state.today.giveUpCount||0, cloud.todayMeta.giveUpCount||0);
+    }
+    // Challenge Mode: ranked by level reached first, then correct count as a tiebreaker —
+    // same rule used everywhere else a run gets compared (results screen, new-record check).
+    const isBetterRun = (a,b) => a && (!b || a.level > b.level || (a.level === b.level && a.correct > b.correct));
+    if(cloud.challengeBest && isBetterRun(cloud.challengeBest, state.challengeBest)){
+      state.challengeBest = { level: cloud.challengeBest.level||0, correct: cloud.challengeBest.correct||0 };
+    }
+    if(cloud.challengeToday && cloud.challengeToday.date === state.challengeToday.date
+       && isBetterRun(cloud.challengeToday, state.challengeToday)){
+      state.challengeToday = { date: state.challengeToday.date, level: cloud.challengeToday.level||0, correct: cloud.challengeToday.correct||0 };
     }
     saveState(state);
   }
@@ -1406,7 +1474,17 @@
   function goHome(){ stopTimer(); view = "home"; render(); }
   function showQuiz(){ view = "quiz"; startTimer(); render(); }
 
-  backBtn.addEventListener("click", goHome);
+  backBtn.addEventListener("click", ()=>{
+    // Mid-run exit is intentionally NOT a confirm dialog (unlike daily mode's give-up button):
+    // Challenge Mode has unlimited daily attempts, so leaving costs nothing worth guarding
+    // against — end it immediately and show the results screen, same as running out of
+    // hearts, rather than jumping straight back to the home screen.
+    if(view === "challenge" && challengeRun && !challengeRun.ended){
+      endChallenge("exit");
+      return;
+    }
+    goHome();
+  });
   refreshBtn.addEventListener("click", ()=>{
     refreshBtn.classList.add("spinning");
     // Explicit push here (unlike the automatic visibilitychange/pageshow/focus-triggered
@@ -1548,7 +1626,7 @@
     versionRow.textContent = VERSION;
     updateDebugRow();
 
-    const isOverlay = (view === "quiz" || view === "review" || view === "done");
+    const isOverlay = (view === "quiz" || view === "review" || view === "done" || view === "challenge");
     pageOverlay.classList.toggle("show", isOverlay);
     overlayBackpack.style.display = (view === "quiz") ? "flex" : "none";
 
@@ -1556,6 +1634,7 @@
     else if(view === "quiz") renderQuestion();
     else if(view === "review") renderReview(reviewKey);
     else if(view === "done") renderDone();
+    else if(view === "challenge") renderChallenge();
 
     renderCalendar();
     if(view === "quiz") renderBackpack();
@@ -1681,9 +1760,15 @@
             ? `<button class="giveup-link" id="giveUpBtn">${t("giveUp")}</button>`
             : `<p class="giveup-limit">${t("giveUpLimitReached")}</p>`
         ) : ""}
+        ${todayDone
+          ? `<button class="challenge-entry-btn" id="challengeEntryBtn">${t("challengeEntry")}</button>`
+          : `<p class="challenge-entry-btn locked">${t("challengeLocked")}</p>`
+        }
       </div>
     `;
     document.getElementById("startBtn").addEventListener("click", onClick);
+    const challengeEntryEl = document.getElementById("challengeEntryBtn");
+    if(challengeEntryEl) challengeEntryEl.addEventListener("click", startChallenge);
     const monthReminderEl = document.getElementById("monthReminderBanner");
     if(monthReminderEl){
       monthReminderEl.addEventListener("click", ()=>{
@@ -2067,6 +2152,190 @@
     justEarnedBadges = [];
     spawnConfetti();
     sfxCelebrate();
+  }
+
+  /* ================= Challenge Mode (math only, infinite random, not part of the daily ladder) =================
+     No mid-run persistence by design (see discussion): leaving/backgrounding always ends the
+     run outright rather than pausing, so there's nothing here that needs to survive a reload —
+     challengeRun lives purely in memory and only its final result gets written to state. */
+  let challengeRun = null; // null when no run has started this app-open; see .ended for "run over, showing results"
+  let challengeTickHandle = null;
+
+  function genChallengeQuestion(level){
+    // Same generator and distractor logic as buildMathItems() uses for daily practice, just
+    // called for one question at a time instead of building a whole day's set up front —
+    // Challenge Mode's whole premise is that math has no pool to exhaust, so there's nothing
+    // to precompute.
+    const q = genMathOne(level);
+    const correct = q.answer;
+    const optCount = optionCountFor(level, 6);
+    let wrongOpts = new Set();
+    let tries = 0;
+    while(wrongOpts.size < optCount-1 && tries < 40){
+      tries++;
+      let delta = (1+Math.floor(Math.random()*8)) * (Math.random()<0.5?-1:1);
+      let w = correct + delta;
+      if(w >= 0 && w !== correct) wrongOpts.add(w);
+    }
+    const opts = [correct, ...wrongOpts].sort(()=>Math.random()-0.5);
+    return { prompt: q.prompt, options: opts.map(String), answer: String(correct) };
+  }
+
+  function isBetterChallengeRun(a, b){
+    // Ranked by level reached first, then correct count as a tiebreaker — same rule the cloud
+    // merge uses, so "best" means the same thing locally and across devices.
+    return !!a && (!b || a.level > b.level || (a.level === b.level && a.correct > b.correct));
+  }
+
+  function startChallenge(){
+    challengeRun = {
+      level: 1, correctStreak: 0, correct: 0, heartsLeft: CHALLENGE_HEARTS,
+      question: genChallengeQuestion(1), timeLeft: CHALLENGE_TIME_FOR_LEVEL[1],
+      ended: false, newRecord: false, isTestRun: false
+    };
+    view = "challenge";
+    render();
+  }
+
+  function startChallengeTimer(){
+    stopChallengeTimer();
+    challengeTickHandle = setInterval(()=>{
+      if(!challengeRun || challengeRun.ended){ stopChallengeTimer(); return; }
+      challengeRun.timeLeft--;
+      if(challengeRun.timeLeft <= 0){ challengeAnswer(null); return; }
+      const el = document.getElementById("challengeTimer");
+      if(el){
+        el.textContent = String(challengeRun.timeLeft);
+        el.classList.toggle("urgent", challengeRun.timeLeft <= 3);
+      }
+    }, 1000);
+  }
+  function stopChallengeTimer(){
+    if(challengeTickHandle){ clearInterval(challengeTickHandle); challengeTickHandle = null; }
+  }
+  // A backgrounded/locked/switched-away PWA has its JS suspended by iOS anyway, so there's no
+  // real "pause" to offer — treating leaving as an immediate end (rather than pretending to
+  // resume later) is honest about that, and was the agreed design: no confirmation dialog,
+  // no resume, just end the run and show results next time it's opened.
+  window.addEventListener("visibilitychange", ()=>{
+    if(document.hidden && challengeRun && !challengeRun.ended) endChallenge("backgrounded");
+  });
+
+  function renderChallenge(){
+    if(!challengeRun) return;
+    if(challengeRun.ended){ renderChallengeResult(); return; }
+    startChallengeTimer();
+    const q = challengeRun.question;
+    overlayCard.innerHTML = `
+      <div class="progress-row">
+        <span class="subject-tag math">${t("subjectMath")}</span>
+        <span>${t("challengeLevelLabel")(challengeRun.level)}</span>
+        <span class="challenge-hearts">${"❤️".repeat(challengeRun.heartsLeft)}${"🖤".repeat(CHALLENGE_HEARTS-challengeRun.heartsLeft)}</span>
+      </div>
+      <div class="challenge-timer-big" id="challengeTimer">${challengeRun.timeLeft}</div>
+      <div class="question-box">
+        <div class="qtext big">${q.prompt}</div>
+      </div>
+      <div class="options" id="challengeOptionsRow"></div>
+      <div class="feedback" id="challengeFeedback"></div>
+    `;
+    const row = document.getElementById("challengeOptionsRow");
+    q.options.forEach(opt=>{
+      const btn = document.createElement("button");
+      btn.className = "opt-btn";
+      btn.textContent = opt;
+      btn.dataset.value = opt;
+      btn.addEventListener("click", ()=>challengeAnswer(opt, btn, row));
+      row.appendChild(btn);
+    });
+  }
+
+  function challengeAnswer(chosen, btnEl, rowEl){
+    if(!challengeRun || challengeRun.ended) return;
+    stopChallengeTimer();
+    sfxClick();
+    const q = challengeRun.question;
+    const timedOut = chosen === null;
+    const correct = !timedOut && String(chosen) === String(q.answer);
+    if(rowEl) Array.from(rowEl.children).forEach(b=>b.disabled = true);
+    if(!correct && rowEl){
+      Array.from(rowEl.children).forEach(b=>{
+        if(String(b.dataset.value)===String(q.answer)) b.classList.add("correct");
+      });
+    }
+    if(btnEl) btnEl.classList.add(correct?"correct":"wrong");
+    if(correct) sfxCorrect(); else sfxWrong();
+
+    const fb = document.getElementById("challengeFeedback");
+    if(fb){
+      fb.textContent = correct ? t("correctFb") : (timedOut ? t("challengeTimeUp") : t("wrongFb"));
+      fb.className = "feedback " + (correct?"good":"bad");
+    }
+
+    if(correct){
+      challengeRun.correct++;
+      challengeRun.correctStreak++;
+      if(challengeRun.correctStreak >= CHALLENGE_STREAK_TO_LEVELUP && challengeRun.level < 6){
+        challengeRun.level++;
+        challengeRun.correctStreak = 0; // difficulty only ever climbs here — a miss costs a
+        // heart, not a level, so struggling with the timer doesn't also throw away ladder
+        // progress on top of that
+      }
+    } else {
+      challengeRun.correctStreak = 0;
+      challengeRun.heartsLeft--;
+    }
+
+    if(challengeRun.heartsLeft <= 0){
+      setTimeout(()=>endChallenge("hearts"), 950);
+      return;
+    }
+    setTimeout(()=>{
+      if(!challengeRun || challengeRun.ended) return; // could have been ended by backgrounding during the pause
+      challengeRun.question = genChallengeQuestion(challengeRun.level);
+      challengeRun.timeLeft = CHALLENGE_TIME_FOR_LEVEL[challengeRun.level];
+      renderChallenge();
+    }, 950);
+  }
+
+  function endChallenge(reason){
+    if(!challengeRun || challengeRun.ended) return;
+    stopChallengeTimer();
+    challengeRun.ended = true;
+    challengeRun.reason = reason;
+    const result = { level: challengeRun.level, correct: challengeRun.correct };
+    challengeRun.isTestRun = isDevDevice;
+    // Dad's device never writes a challenge result at all (see cloudPayloadFromLocal for why)
+    // — a test run only ever shows in that run's own results screen, then is gone.
+    if(!isDevDevice){
+      if(isBetterChallengeRun(result, state.challengeToday)){
+        state.challengeToday = { date: todayStr(), level: result.level, correct: result.correct };
+      }
+      challengeRun.newRecord = isBetterChallengeRun(result, state.challengeBest);
+      if(challengeRun.newRecord) state.challengeBest = { level: result.level, correct: result.correct };
+      saveState(state);
+      pushToCloud();
+    }
+    if(view === "challenge") render();
+  }
+
+  function renderChallengeResult(){
+    const r = challengeRun;
+    overlayCard.innerHTML = `
+      <div class="done">
+        <div class="big">⚡</div>
+        <h2>${t("challengeDoneTitle")}</h2>
+        <p>${t("challengeResultLine")(r.level, r.correct)}</p>
+        ${r.isTestRun
+          ? `<p class="review-time">${t("challengeTestRunNote")}</p>`
+          : `<p class="review-time">${t("challengeTodayBest")(state.challengeToday.level, state.challengeToday.correct)}<br>${t("challengeAllTimeBest")(state.challengeBest.level, state.challengeBest.correct)}</p>`
+        }
+        ${r.newRecord ? `<div class="badge-banner">${t("challengeNewRecord")}</div>` : ""}
+        <button class="challenge-again-btn" id="challengeAgainBtn">${t("challengeAgain")}</button>
+      </div>
+    `;
+    document.getElementById("challengeAgainBtn").addEventListener("click", startChallenge);
+    if(r.newRecord){ spawnConfetti(); sfxCelebrate(); }
   }
 
   /* ================= Init ================= */
