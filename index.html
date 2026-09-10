@@ -648,7 +648,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v2.17.1";
+  const VERSION = "v2.17.2";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -1295,15 +1295,23 @@
     const row = document.getElementById("syncStatusRow");
     if(row) row.textContent = t("syncStatus")(syncStatus);
   }
+  function updateDebugRow(){
+    // moreRow is only otherwise touched inside render(), which a background sync snapshot
+    // never calls (it calls renderHome()/renderReview() directly) — so without this, the
+    // debug readout freezes at whatever it was at boot and never reflects a live sync.
+    if(isDevDevice && moreRow) moreRow.textContent = t("moreRow") + ` · badges:[${state.badges.join(",")}] sync:${syncStatus}`;
+  }
   function connectSync(pairCode){
     if(isTestMode()){ setSyncStatus("off"); return; } // test mode stays fully offline
     if(!window.CampSync){ return; }
     if(!pairCode){ setSyncStatus("off"); return; }
     setSyncStatus("connecting");
+    updateDebugRow();
     window.CampSync.subscribe(pairCode, (cloud)=>{
       setSyncStatus("on");
       mergeCloudIntoLocal(cloud);
       checkForNewReaction();
+      updateDebugRow();
       if(view === "home") renderHome();
       if(view === "review") renderReview(reviewKey);
     });
@@ -1514,11 +1522,7 @@
     syncRowLabel.textContent = t("syncRowLabel");
     document.getElementById("syncStatusRow").textContent = t("syncStatus")(syncStatus);
     versionRow.textContent = VERSION;
-    // Temporary diagnostic (dev device only) for tracking down why badges aren't syncing to
-    // the iPhone — shows what THIS device's own state.badges actually holds right now, so we
-    // can tell "cloud data never arrived / never merged" apart from "it merged fine, the
-    // badge row just isn't rendering it". Safe to remove once that's figured out.
-    moreRow.textContent = t("moreRow") + (isDevDevice ? ` · badges:[${state.badges.join(",")}] sync:${syncStatus}` : "");
+    updateDebugRow();
 
     const isOverlay = (view === "quiz" || view === "review" || view === "done");
     pageOverlay.classList.toggle("show", isOverlay);
