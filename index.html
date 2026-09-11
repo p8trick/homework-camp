@@ -332,6 +332,7 @@
   }
   .done .big{ animation:pop-in .5s ease-out; }
   .stars-line.pop{ animation:pop-in .5s ease-out .15s both; }
+  .badge-banner.record-pop{ animation:pop-in .5s ease-out .2s both; }
 
   /* ================= iPad landscape composition ================= */
   /* Scoped to landscape orientation only — iPad portrait intentionally falls back to the
@@ -719,7 +720,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v3.3.1";
+  const VERSION = "v3.3.3";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -2316,7 +2317,7 @@
       challengeRun.timeLeft--;
       if(challengeRun.timeLeft <= 0){ challengeAnswer(null); return; }
       const urgent = challengeRun.timeLeft <= 3;
-      if(urgent) sfxTickUrgent(); else sfxTick();
+      if(challengeRun.timeLeft <= 10){ if(urgent) sfxTickUrgent(); else sfxTick(); } // ticking sound only kicks in inside the last 10s — silent before that, per feedback that it was grating throughout the whole question
       const el = document.getElementById("challengeTimer");
       if(el){
         el.textContent = String(challengeRun.timeLeft);
@@ -2450,7 +2451,7 @@
           ? `<p class="review-time">${t("challengeTestRunNote")}<br>${t("challengeDevTestBest")(state.devTestBest.level, state.devTestBest.correct)}</p>`
           : `<p class="review-time">${t("challengeTodayBest")(state.challengeToday.level, state.challengeToday.correct)}<br>${t("challengeAllTimeBest")(state.challengeBest.level, state.challengeBest.correct)}</p>`
         }
-        ${r.newRecord ? `<div class="badge-banner">${t("challengeNewRecord")}</div>` : ""}
+        ${r.newRecord ? `<div class="badge-banner record-pop">${t("challengeNewRecord")}</div>` : ""}
         <button class="challenge-again-btn" id="challengeAgainBtn">${t("challengeAgain")}</button>
       </div>
     `;
