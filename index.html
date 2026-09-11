@@ -719,7 +719,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v3.2.2";
+  const VERSION = "v3.3.1";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -1335,7 +1335,15 @@
       // zeros) means a push from iPhone can never overwrite what's already in the cloud either.
       ...(isDevDevice ? {} : {
         challengeBest: state.challengeBest,
-        challengeToday: state.challengeToday
+        challengeToday: state.challengeToday,
+        // Same reasoning as challengeBest/challengeToday just above: level is the live,
+        // currently-in-effect difficulty for each subject (1-6), and it's not derivable from
+        // `days` after the fact — it just quietly climbs/drops as questions get answered. If
+        // dad tests the daily quiz on his iPhone, his own answers would otherwise push HIS
+        // level and silently overwrite the real one. Excluding it from every dev-device
+        // push is what makes "wipe the iPad, re-pair with the same code" actually restore the
+        // difficulty that was really earned, instead of quietly resetting both subjects to Lv1.
+        level: state.level
       }),
       // The reverse of the block above: this setting is only ever pushed FROM dad's iPhone
       // (the only device with the UI to change it) — the iPad never sends this field at all,
@@ -1415,6 +1423,18 @@
     if(cloud.challengeToday && cloud.challengeToday.date === state.challengeToday.date
        && isBetterRun(cloud.challengeToday, state.challengeToday)){
       state.challengeToday = { date: state.challengeToday.date, level: cloud.challengeToday.level||0, correct: cloud.challengeToday.correct||0 };
+    }
+    // Also single-writer (only the non-dev device ever pushes it), so plain overwrite — level
+    // legitimately moves up AND down over time, so there's no "bigger is better" comparison to
+    // make here the way there is for the streak/badge/challenge fields above. But unlike those
+    // fields, it can't be an unconditional overwrite either: if today's practice is already
+    // under way on this device, its own live, in-progress level is the authority — adopting a
+    // cloud snapshot that predates this session would yank an in-session level-up (or -down)
+    // backward mid-quiz. Only adopt it before today's first answer, i.e. exactly the "wiped
+    // device, re-paired, hasn't started today yet" restore scenario this was added for.
+    if(cloud.level && typeof cloud.level === "object" && state.today.answers.length === 0){
+      if(typeof cloud.level.en === "number") state.level.en = cloud.level.en;
+      if(typeof cloud.level.math === "number") state.level.math = cloud.level.math;
     }
     // Single-writer setting (only dad's iPhone ever pushes it — see cloudPayloadFromLocal),
     // so a plain overwrite is correct here, not a merge/comparison like the fields above.
@@ -1545,14 +1565,23 @@
   });
   refreshBtn.addEventListener("click", ()=>{
     refreshBtn.classList.add("spinning");
-    // Explicit push here (unlike the automatic visibilitychange/pageshow/focus-triggered
-    // refreshOnForeground, which stays pull-only so it doesn't fire a write on every brief
-    // backgrounding) — tapping the button is a deliberate "sync now" gesture, and pushing
-    // this device's current state is what actually gets e.g. already-earned badges that
-    // predate a data-model change (like badgeSet) into the cloud doc, instead of waiting on
-    // the next quiz completion to trigger a push naturally.
-    pushToCloud();
-    refreshOnForeground();
+    // Pull-merge-THEN-push, not push-first: a freshly-reinstalled/blank profile mashing this
+    // button before its first real sync would otherwise push blank scalar fields (bestStreak,
+    // streak) and briefly stomp the cloud doc's real values with 0 — harmless in the end
+    // (every device's own read-side merge only ever takes the bigger number, and the real
+    // device's own next push self-heals it), but pulling first means the blank device merges
+    // in the real data BEFORE it ever pushes anything, so the push always carries correct,
+    // already-merged data instead of raw defaults — closes the gap outright rather than
+    // relying on it being self-healing.
+    if(!isTestMode() && state.pairCode && window.CampSync){
+      window.CampSync.pull(state.pairCode).then(cloud=>{
+        mergeCloudIntoLocal(cloud);
+        pushToCloud();
+        refreshOnForeground();
+      });
+    } else {
+      refreshOnForeground();
+    }
     setTimeout(()=>refreshBtn.classList.remove("spinning"), 700);
   });
   settingsBtn.addEventListener("click", ()=>{
