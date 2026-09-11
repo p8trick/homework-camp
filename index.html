@@ -708,7 +708,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v3.1.1";
+  const VERSION = "v3.2.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -1234,6 +1234,8 @@
   function sfxCorrect(){ beep(880,0.12,"sine",0.13); setTimeout(()=>beep(1175,0.15,"sine",0.13), 90); }
   function sfxWrong(){ beep(170,0.28,"sawtooth",0.10); }
   function sfxCelebrate(){ [660,880,1046,1318].forEach((f,i)=>setTimeout(()=>beep(f,0.18,"sine",0.14), i*120)); }
+  function sfxTick(){ beep(700, 0.045, "square", 0.045); } // Challenge Mode countdown, every second
+  function sfxTickUrgent(){ beep(1100, 0.07, "square", 0.09); } // last 3 seconds — higher, louder, longer
 
   /* ================= Confetti ================= */
   const confettiLayer = document.getElementById("confettiLayer");
@@ -2273,10 +2275,12 @@
       if(!challengeRun || challengeRun.ended){ stopChallengeTimer(); return; }
       challengeRun.timeLeft--;
       if(challengeRun.timeLeft <= 0){ challengeAnswer(null); return; }
+      const urgent = challengeRun.timeLeft <= 3;
+      if(urgent) sfxTickUrgent(); else sfxTick();
       const el = document.getElementById("challengeTimer");
       if(el){
         el.textContent = String(challengeRun.timeLeft);
-        el.classList.toggle("urgent", challengeRun.timeLeft <= 3);
+        el.classList.toggle("urgent", urgent);
       }
     }, 1000);
   }
