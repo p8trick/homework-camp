@@ -204,10 +204,10 @@
 
   .challenge-hearts{ font-size:17px; letter-spacing:2px; }
   .challenge-timer-inline{
-    font-weight:800; font-size:13px; color:var(--stone); transition:font-size .2s ease, color .2s ease;
+    font-weight:800; font-size:17px; color:var(--stone); display:inline-block;
   }
-  .challenge-timer-inline.urgent{ color:var(--danger); font-size:20px; animation:urgentPulse .5s ease infinite; }
-  @keyframes urgentPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.15); } }
+  .challenge-timer-inline.urgent{ color:var(--danger); animation:urgentPulse .5s ease infinite; }
+  @keyframes urgentPulse{ 0%,100%{ transform:scale(1.15); } 50%{ transform:scale(1.4); } }
   @keyframes bannerSlideIn{
     0%{ transform:translateY(-14px); opacity:0; }
     100%{ transform:translateY(0); opacity:1; }
@@ -444,8 +444,7 @@
     .done p{ font-size:16px; }
     .stars-line{ font-size:34px; }
     .badge-banner{ font-size:14px; }
-    .challenge-timer-inline{ font-size:15px; }
-    .challenge-timer-inline.urgent{ font-size:24px; }
+    .challenge-timer-inline{ font-size:19px; }
     .challenge-hearts{ font-size:24px; }
   }
 
@@ -772,7 +771,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v3.8.0";
+  const VERSION = "v3.8.2";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
