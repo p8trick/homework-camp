@@ -771,7 +771,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v3.7.0";
+  const VERSION = "v3.7.1";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -1447,8 +1447,13 @@
         const remote = cloud.days[k];
         if(!state.history[k]){
           state.history[k] = remote; // remote has a day we don't have locally: adopt it
-        } else if(remote && remote.reaction && !state.history[k].reaction){
-          state.history[k].reaction = remote.reaction; // a reaction can arrive from the other device
+        } else if(remote && remote.reaction && JSON.stringify(remote.reaction) !== JSON.stringify(state.history[k].reaction)){
+          // Reactions only ever get set from dad's iPhone (the picker is isDevDevice-only), so
+          // this is single-writer just like schoolDays/challengeTimeBase — always take the
+          // cloud's value when it differs, not just the first time. The old `!...reaction`
+          // guard only let the FIRST reaction through; once any reaction existed locally, every
+          // later re-pick (dad changing his mind on the emoji) was silently never picked up.
+          state.history[k].reaction = remote.reaction;
         }
       });
       // Recompute rather than trust a transmitted streak number: state.history is the real
