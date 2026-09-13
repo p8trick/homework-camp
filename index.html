@@ -130,10 +130,25 @@
   .cal-cell.blank{visibility:hidden;}
   .cal-cell.future{color:rgba(0,0,0,.25);}
   .cal-cell.missed{background:rgba(0,0,0,.08); border-color:rgba(0,0,0,.15);}
+  .cal-cell.school-off{background:#DCEEF7; border-color:rgba(0,0,0,.15);}
   .cal-cell.done{background:var(--gold); border-color:var(--dirt-dark); cursor:pointer; color:var(--ink);}
   .cal-cell.today{outline:2px dashed var(--night); outline-offset:1px; cursor:pointer; background:var(--diamond);}
   .cal-cell .stardot{position:absolute; bottom:1px; font-size:6px;}
   .cal-cell .reactiondot{position:absolute; top:-3px; right:-3px; font-size:11px; line-height:1; filter:drop-shadow(0 1px 1px rgba(0,0,0,.3));}
+  .cal-cell .school-badge{
+    position:absolute; top:-6px; left:-6px; width:16px; height:16px;
+    background:var(--night); border:2px solid var(--ink); border-radius:4px;
+    color:var(--paper); font-size:9px; font-weight:800; line-height:1;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .weekday-toggle-row{ display:flex; gap:6px; justify-content:center; padding:4px 0 10px; }
+  .weekday-pill{
+    width:30px; height:30px; border:2px solid var(--ink); background:var(--paper);
+    color:var(--ink); font-weight:800; font-size:12px; cursor:pointer; border-radius:4px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .weekday-pill.active{ background:var(--night); color:var(--paper); }
+  .weekday-toggle-row.readonly .weekday-pill{ cursor:default; opacity:.75; }
 
   .home-columns{ width:100%; max-width:480px; display:flex; flex-direction:column; }
   .home-columns > .cal-wrap, .home-columns > .card{ margin-bottom:14px; }
@@ -500,6 +515,15 @@
       <input type="number" id="challengeTimerInput" min="3" max="60" step="1" style="width:70px;">
     </div>
     <div class="settings-row muted" id="challengeTimerHint"></div>
+    <div class="settings-row" id="schoolDaysRow">
+      <span id="schoolDaysLabel">School days (no-iPad, streak-safe)</span>
+    </div>
+    <div class="weekday-toggle-row" id="schoolDaysToggleRow"></div>
+    <div class="settings-row" id="schoolDaysSinceRow">
+      <span id="schoolDaysSinceLabel">Effective from</span>
+      <input type="date" id="schoolDaysSinceInput">
+    </div>
+    <div class="settings-row muted" id="schoolDaysHint"></div>
     <div class="settings-row muted" id="versionRow"></div>
     <div class="settings-row muted" id="moreRow"></div>
     <button class="modal-close" id="closeSettings">Close</button>
@@ -633,6 +657,11 @@
       challengeAllTimeBest:(lvl,correct)=>`All-time best: Level ${lvl} · ${correct} correct`,
       challengeTestRunNote:"Test run on dad's device — not saved to the record",
       challengeDevTestBest:(lvl,correct)=>`This device's test best: Lv${lvl}·${correct}`,
+      schoolBadgeLetter:"S",
+      schoolDaysLabel:"School days (no-iPad, streak-safe)",
+      schoolDaysSinceLabel:"Effective from",
+      schoolDaysHint:"On these days, skipping practice won't break the streak. Doing it anyway still counts normally. Syncs to both devices right away.",
+      schoolDaysReadOnlyHint:"Set by a parent — these days don't require finishing today's camp.",
       challengeNewRecord:"🎉 New all-time record!",
       challengeAgain:"⚡ Play Again",
       reactionBanner:(date,emoji)=>`${emoji} Dad cheered for your ${date} practice!`,
@@ -697,6 +726,11 @@
       challengeAllTimeBest:(lvl,correct)=>`历史最佳：第 ${lvl} 级 · 答对 ${correct} 题`,
       challengeTestRunNote:"爸爸设备上的测试局，不计入战绩",
       challengeDevTestBest:(lvl,correct)=>`本机测试最佳：第${lvl}级·${correct}题`,
+      schoolBadgeLetter:"校",
+      schoolDaysLabel:"学习日（无需iPad，不影响连胜）",
+      schoolDaysSinceLabel:"生效起始日",
+      schoolDaysHint:"这几天没做练习不会打断连胜；如果照样做了，也正常算数。设置后立即同步两台设备。",
+      schoolDaysReadOnlyHint:"由家长控制哪几天为学校日，不需要强制做每日营地任务。",
       challengeNewRecord:"🎉 刷新历史最佳！",
       challengeAgain:"⚡ 再来一局",
       reactionBanner:(date,emoji)=>`${emoji} 爸爸给 ${date} 的练习点赞啦！`,
@@ -720,7 +754,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v3.3.3";
+  const VERSION = "v3.6.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -771,15 +805,22 @@
     const base = state.challengeTimeBase || 18;
     return Math.max(1, Math.round(base * CHALLENGE_TIME_RATIOS[level]));
   }
-  function daysSinceDateStr(dateStr){
+  function completedDaysSince(dateStr){
+    // Used for the ladder-ceiling reminder instead of a raw calendar-day count: with a
+    // schoolDays schedule in place, "14 calendar days" could be as few as 6 actual practice
+    // sessions, which isn't enough evidence he's really outgrown the ladder. Counting completed
+    // days directly sidesteps needing any schoolDays-awareness here at all — an unpracticed day,
+    // school day or not, simply isn't counted, same end result with less code.
     if(!dateStr) return 0;
-    const then = new Date(dateStr+"T00:00:00");
-    const now = new Date(todayStr()+"T00:00:00");
-    return Math.round((now-then)/86400000);
+    let count = 0;
+    Object.keys(state.history).forEach(k=>{
+      if(k >= dateStr && state.history[k] && state.history[k].done) count++;
+    });
+    return count;
   }
   function ladderCeilingSubjects(){
     if(!isDevDevice) return [];
-    return ["en","math"].filter(subj => daysSinceDateStr(state.maxLevelSince[subj]) >= LADDER_CEILING_DAYS);
+    return ["en","math"].filter(subj => completedDaysSince(state.maxLevelSince[subj]) >= LADDER_CEILING_DAYS);
   }
   function ladderCeilingDismissKey(){
     return `${state.maxLevelSince.en||""}|${state.maxLevelSince.math||""}`;
@@ -828,6 +869,18 @@
     // can never appear on the iPad and never collide with the real record.
     if(!raw.devTestBest) raw.devTestBest = { level: 0, correct: 0 };
     if(raw.challengeTimeBase == null) raw.challengeTimeBase = 18; // Lv1 seconds; Lv2-6 scale off CHALLENGE_TIME_RATIOS
+    if(!Array.isArray(raw.schoolDaysHistory)){
+      // Each entry is {since, days}: "starting from `since`, the weekly pattern is `days`."
+      // A single flat array+date used to represent this, but that can't express "school days
+      // Mon-Thu, then none over summer, then Mon-Thu again next fall" — editing the pattern
+      // again after a gap would retroactively repaint the gap with the new pattern. A history
+      // of periods fixes that: each period keeps its own dates forever once superseded.
+      const days = Array.isArray(raw.schoolDays) ? raw.schoolDays : [1,2,3,4];
+      const since = raw.schoolDaysSince || todayStr();
+      raw.schoolDaysHistory = [{ since, days }];
+      delete raw.schoolDays;
+      delete raw.schoolDaysSince;
+    }
     if(!raw.levelShiftV3Applied){
       // v2.8.0 inserted a new tier into both level ladders (math: within-20 becomes level 3;
       // english: blends/CVCe becomes level 5), pushing what used to be level 3+ up by one.
@@ -1349,7 +1402,7 @@
       // The reverse of the block above: this setting is only ever pushed FROM dad's iPhone
       // (the only device with the UI to change it) — the iPad never sends this field at all,
       // so it can never overwrite dad's setting with its own stale local copy.
-      ...(isDevDevice ? { challengeTimeBase: state.challengeTimeBase } : {})
+      ...(isDevDevice ? { challengeTimeBase: state.challengeTimeBase, schoolDaysHistory: state.schoolDaysHistory } : {})
     };
   }
   function badgeSetFromArray(arr){
@@ -1442,6 +1495,10 @@
     if(cloud.challengeTimeBase != null && cloud.challengeTimeBase !== state.challengeTimeBase){
       state.challengeTimeBase = cloud.challengeTimeBase;
     }
+    // Same single-writer pattern as challengeTimeBase just above.
+    if(Array.isArray(cloud.schoolDaysHistory) && JSON.stringify(cloud.schoolDaysHistory) !== JSON.stringify(state.schoolDaysHistory)){
+      state.schoolDaysHistory = cloud.schoolDaysHistory;
+    }
     saveState(state);
   }
   function pushToCloud(){
@@ -1473,6 +1530,13 @@
       updateDebugRow();
       if(view === "home") renderHome();
       if(view === "review") renderReview(reviewKey);
+      // Unlike renderHome/renderReview above, renderCalendar() and the settings school-days
+      // toggle are normally only refreshed by the full render() — a background sync snapshot
+      // never calls that, so without this, a schoolDays change (or even a newly-synced day's
+      // stars) pushed from the other device wouldn't show up here until something else
+      // triggered a full render. Same staleness category as the debug row fix earlier.
+      renderCalendar();
+      renderSchoolDaysToggle();
     });
   }
   function checkForNewReaction(){
@@ -1530,6 +1594,22 @@
   const challengeTimerLabel = document.getElementById("challengeTimerLabel");
   const challengeTimerHint = document.getElementById("challengeTimerHint");
   const challengeTimerInput = document.getElementById("challengeTimerInput");
+  const schoolDaysLabel = document.getElementById("schoolDaysLabel");
+  const schoolDaysHint = document.getElementById("schoolDaysHint");
+  const schoolDaysToggleRow = document.getElementById("schoolDaysToggleRow");
+  const schoolDaysSinceLabel = document.getElementById("schoolDaysSinceLabel");
+  const schoolDaysSinceInput = document.getElementById("schoolDaysSinceInput");
+  if(!isDevDevice) schoolDaysSinceInput.disabled = true; // visible on the iPad (transparency) but not editable there, same as the weekday pills
+  schoolDaysSinceInput.addEventListener("change", ()=>{
+    if(!schoolDaysSinceInput.value) return;
+    // Only ever edits the CURRENT (last) period's start date — correcting when the latest
+    // policy actually began. Earlier, already-superseded periods are untouched by this.
+    currentSchoolDaysEntry().since = schoolDaysSinceInput.value;
+    state.schoolDaysHistory.sort((a,b)=> a.since < b.since ? -1 : a.since > b.since ? 1 : 0);
+    saveState(state);
+    pushToCloud();
+    renderCalendar();
+  });
   if(!isDevDevice){
     // Not dad's iPhone — the son's iPad should look like a clean, untouchable kid-mode app.
     document.getElementById("testModeRow").style.display = "none";
@@ -1719,6 +1799,11 @@
       challengeTimerHint.textContent = t("challengeTimerHint");
       if(document.activeElement !== challengeTimerInput) challengeTimerInput.value = state.challengeTimeBase;
     }
+    schoolDaysLabel.textContent = t("schoolDaysLabel");
+    schoolDaysSinceLabel.textContent = t("schoolDaysSinceLabel");
+    if(document.activeElement !== schoolDaysSinceInput) schoolDaysSinceInput.value = currentSchoolDaysEntry().since;
+    schoolDaysHint.textContent = isDevDevice ? t("schoolDaysHint") : t("schoolDaysReadOnlyHint");
+    renderSchoolDaysToggle();
     testBanner.textContent = t("testBannerText");
     document.body.classList.toggle("test-mode", isTestMode());
     nameRowLabel.textContent = t("nameRowLabel");
@@ -1767,6 +1852,8 @@
       const isFuture = cellDate > new Date(now0.getFullYear(),now0.getMonth(),now0.getDate());
       const record = state.history[key];
       const todayLiveDone = isToday && state.today.answers.length >= state.today.items.length;
+      const isSchool = isSchoolDay(cellDate);
+      const schoolBadge = `<span class="school-badge">${t("schoolBadgeLetter")}</span>`;
 
       const cell = document.createElement("div");
       let cls = "cal-cell";
@@ -1778,20 +1865,65 @@
         cls += " done";
         inner += `<span class="stardot">${"⭐".repeat(record.stars||0)}</span>`;
         if(record.reaction && record.reaction.emoji) inner += `<span class="reactiondot">${record.reaction.emoji}</span>`;
+        if(isSchool) inner += schoolBadge; // did it anyway on a day off — still flagged, not just treated as an ordinary done day
         cell.addEventListener("click", ()=>{ reviewKey = key; view = "review"; render(); });
       } else if(isToday){
         cls += " today";
+        if(isSchool) inner += schoolBadge; // today being a school day should be visible before the day is even over, not just in hindsight
         if(todayLiveDone){
           cell.addEventListener("click", ()=>{ reviewKey = key; view = "review"; render(); });
         } else {
           cell.addEventListener("click", showQuiz);
         }
+      } else if(isSchool){
+        cls += " school-off"; // an untouched school day — deliberately NOT styled as "missed"
+        inner += schoolBadge;
       } else {
         cls += " missed";
       }
       cell.className = cls;
       cell.innerHTML = inner;
       calGrid.appendChild(cell);
+    }
+  }
+
+  function currentSchoolDaysEntry(){
+    return state.schoolDaysHistory[state.schoolDaysHistory.length-1];
+  }
+  function renderSchoolDaysToggle(){
+    const labels = t("weekdays");
+    const entry = currentSchoolDaysEntry();
+    schoolDaysToggleRow.className = "weekday-toggle-row" + (isDevDevice ? "" : " readonly");
+    schoolDaysToggleRow.innerHTML = labels.map((label,i)=>
+      `<div class="weekday-pill${entry.days.includes(i)?' active':''}" data-day="${i}">${label}</div>`
+    ).join("");
+    if(isDevDevice){
+      // Only dad's iPhone can actually toggle this — the iPad shows the identical row (so he
+      // can see what's set) but with clicks disabled, per the "not controllable there" ask.
+      schoolDaysToggleRow.querySelectorAll(".weekday-pill").forEach(el=>{
+        el.addEventListener("click", ()=>{
+          const day = parseInt(el.dataset.day, 10);
+          const cur = currentSchoolDaysEntry();
+          const newDays = cur.days.slice();
+          const idx = newDays.indexOf(day);
+          if(idx === -1) newDays.push(day); else newDays.splice(idx,1);
+          newDays.sort((a,b)=>a-b);
+          if(cur.since === todayStr()){
+            // Still same-day editing (e.g. clicked a couple of pills in a row just now) — update
+            // in place rather than forking a fresh period for every single click.
+            cur.days = newDays;
+          } else {
+            // Actually changing an established policy — fork a NEW period starting today, so
+            // the old one keeps its own dates untouched forever (this is the whole point of
+            // schoolDaysHistory over the old flat schoolDays/schoolDaysSince pair).
+            state.schoolDaysHistory.push({ since: todayStr(), days: newDays });
+          }
+          saveState(state);
+          pushToCloud(); // immediate, no debounce — same as the challenge timer setting
+          renderSchoolDaysToggle();
+          if(view === "home") renderCalendar(); // reflect the change on the calendar right away
+        });
+      });
     }
   }
 
@@ -2031,14 +2163,38 @@
   // resetTodayProgress() removes a (possibly accidental) completion, since the streak
   // counter itself isn't safe to just decrement — it may have already advanced bestStreak
   // or unlocked a badge off the bad data.
+  function isSchoolDay(d){
+    // Walk the period history to find whichever period was in effect on this date — never the
+    // flat "current pattern" alone, or a policy change today would retroactively repaint a
+    // past period (e.g. summer break) that was governed by a different pattern entirely. Also
+    // naturally means a date before the very first period ever existed is never a school day.
+    const key = keyOf(d);
+    let days = null;
+    for(const entry of state.schoolDaysHistory){
+      if(entry.since <= key) days = entry.days; else break; // history stays sorted ascending by since
+    }
+    return !!days && days.includes(d.getDay());
+  }
   function recomputeStreak(){
     let d = new Date();
     const key = todayStr();
     if(!(state.history[key] && state.history[key].done)) d.setDate(d.getDate()-1);
     let streak = 0;
-    while(state.history[keyOf(d)] && state.history[keyOf(d)].done){
-      streak++;
-      d.setDate(d.getDate()-1);
+    let safety = 3650; // ~10 years — just a guard against a pathological schoolDays config (e.g. all 7 days) looping forever
+    while(safety-- > 0){
+      const dk = keyOf(d);
+      if(state.history[dk] && state.history[dk].done){
+        streak++;
+        d.setDate(d.getDate()-1);
+      } else if(isSchoolDay(d)){
+        // Expected to be iPad-free this day — skip over it without breaking the streak OR
+        // extending it; a completed day always counts (handles "exception day, got the iPad
+        // anyway" automatically — see the schoolDays discussion), but an untouched school day
+        // is simply not evidence either way, so it's excluded from the count entirely.
+        d.setDate(d.getDate()-1);
+      } else {
+        break; // a non-school day with nothing done — this is where the streak actually ends
+      }
     }
     state.streak = streak;
     if(state.streak > state.bestStreak) state.bestStreak = state.streak;
