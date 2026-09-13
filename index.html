@@ -208,6 +208,15 @@
   }
   .challenge-timer-big.urgent{ color:var(--danger); animation:urgentPulse .5s ease infinite; }
   @keyframes urgentPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.15); } }
+  @keyframes bannerSlideIn{
+    0%{ transform:translateY(-14px); opacity:0; }
+    100%{ transform:translateY(0); opacity:1; }
+  }
+  .reaction-banner.enter{ animation:bannerSlideIn .4s ease-out; }
+  .reaction-banner.fade-out{ transition:opacity .45s ease, transform .45s ease; opacity:0; transform:translateY(-10px); }
+  .emoji-outline{
+    text-shadow:-1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink), 1px 1px 0 var(--ink);
+  }
   .challenge-entry-btn{
     display:block; width:100%; margin-top:10px; padding:10px; font-size:13px; font-weight:800;
     font-family:'Baloo 2', sans-serif; background:#FBEEC9; color:var(--night);
@@ -672,7 +681,7 @@
       schoolDaysReadOnlyHint:"Set by a parent — these days don't require finishing today's camp.",
       challengeNewRecord:"🎉 New all-time record!",
       challengeAgain:"⚡ Play Again",
-      reactionBanner:(date,emoji)=>`${emoji} Dad cheered for your ${date} practice!`,
+      reactionBanner:(date,emoji)=>`<span class="emoji-outline">${emoji}</span> Dad cheered for your ${date} practice!`,
       monthReminderBanner:"📅 This month is wrapping up. No rush — if you get a spare moment, updating this month's bonus content with Claude is a nice-to-have, not a must.",
       subjectNameEn:"English", subjectNameMath:"Math", andWord:" and ",
       ladderCeilingBanner:subj=>`🏔️ ${subj} has been at the top level for ${LADDER_CEILING_DAYS}+ days — might be worth designing a new tier together.`,
@@ -741,7 +750,7 @@
       schoolDaysReadOnlyHint:"由家长控制哪几天为学校日，不需要强制做每日营地任务。",
       challengeNewRecord:"🎉 刷新历史最佳！",
       challengeAgain:"⚡ 再来一局",
-      reactionBanner:(date,emoji)=>`${emoji} 爸爸给 ${date} 的练习点赞啦！`,
+      reactionBanner:(date,emoji)=>`<span class="emoji-outline">${emoji}</span> 爸爸给 ${date} 的练习点赞啦！`,
       monthReminderBanner:"📅 这个月快过完了。不着急——有空的话可以找Claude更新一下这个月的加分内容，没空跳过也完全没关系。",
       subjectNameEn:"英语", subjectNameMath:"数学", andWord:"和",
       ladderCeilingBanner:subj=>`🏔️ ${subj}已经在最高难度待了${LADDER_CEILING_DAYS}天以上——可以考虑找Claude聊聊加一层新内容了。`,
@@ -762,7 +771,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v3.6.8";
+  const VERSION = "v3.7.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -1548,16 +1557,45 @@
     });
   }
   function checkForNewReaction(){
+    if(pendingReactionBanner) return; // already showing/timing one out — don't clobber it mid-display
     // Show a banner for the most recent completed day if it has a reaction we haven't shown yet.
     const dates = Object.keys(state.history).sort().reverse();
     for(const k of dates.slice(0,3)){
       const rec = state.history[k];
-      if(rec && rec.reaction && !state.seenReactionKeys.includes(k+":"+rec.reaction.emoji)){
-        pendingReactionBanner = { date:k, emoji:rec.reaction.emoji };
+      const seenKey = rec && rec.reaction ? k+":"+rec.reaction.emoji : null;
+      if(seenKey && !state.seenReactionKeys.includes(seenKey)){
+        // Marked seen the instant it's queued up to show, not on a tap — "saw it, done" is the
+        // whole point now; there's no dismiss action left to hang the seen-flag on.
+        state.seenReactionKeys.push(seenKey);
+        saveState(state);
+        pendingReactionBanner = { date:k, emoji:rec.reaction.emoji, firstShownAt: Date.now(), entranceAnimated: false };
+        scheduleReactionBannerFadeOut();
         return;
       }
     }
     pendingReactionBanner = null;
+  }
+  function scheduleReactionBannerFadeOut(){
+    if(!pendingReactionBanner) return;
+    const banner = pendingReactionBanner;
+    const remaining = Math.max(0, 5000 - (Date.now() - banner.firstShownAt));
+    setTimeout(()=>{
+      if(pendingReactionBanner !== banner) return; // superseded/cleared already — nothing to do
+      const el = document.getElementById("reactionBanner");
+      if(el){
+        el.classList.add("fade-out");
+        setTimeout(()=>{
+          if(pendingReactionBanner !== banner) return;
+          pendingReactionBanner = null;
+          checkForNewReaction(); // pick up the next backlogged reaction, if any, starting its own cycle
+          if(view === "home") renderHome();
+        }, 450); // matches the fade-out CSS transition duration
+      } else {
+        // Not even on the home screen right now (e.g. mid-quiz) — nothing to animate, just clear.
+        pendingReactionBanner = null;
+        checkForNewReaction();
+      }
+    }, remaining);
   }
   let pendingReactionBanner = null;
 
@@ -1976,9 +2014,17 @@
       return `<div class="badge-chip ${earned?'':'locked'}" title="${t('badgeLabel')(m)}">${BADGE_ICON[m]}</div>`;
     }).join("");
 
+    // Render-time is the final authority on expiry, not just the setTimeout in
+    // scheduleReactionBannerFadeOut — iOS suspends JS timers while the PWA is backgrounded, so
+    // a render triggered right after returning to foreground could otherwise still show a
+    // banner whose 5s window (in real elapsed time) has already actually passed.
+    if(pendingReactionBanner && (Date.now() - pendingReactionBanner.firstShownAt >= 5000)){
+      pendingReactionBanner = null;
+    }
     const banner = pendingReactionBanner
-      ? `<div class="badge-banner" id="reactionBanner">${t("reactionBanner")(pendingReactionBanner.date, pendingReactionBanner.emoji)}</div>`
+      ? `<div class="badge-banner reaction-banner${pendingReactionBanner.entranceAnimated ? '' : ' enter'}" id="reactionBanner">${t("reactionBanner")(pendingReactionBanner.date, pendingReactionBanner.emoji)}</div>`
       : "";
+    if(pendingReactionBanner) pendingReactionBanner.entranceAnimated = true; // only ever plays the slide-in once per banner, however many times renderHome() re-runs while it's up
     const monthBanner = shouldShowMonthReminder()
       ? `<div class="badge-banner" id="monthReminderBanner">${t("monthReminderBanner")}</div>`
       : "";
@@ -2036,19 +2082,9 @@
         renderHome();
       });
     }
-    const reactionBannerEl = document.getElementById("reactionBanner");
-    if(reactionBannerEl && pendingReactionBanner){
-      const seenKey = pendingReactionBanner.date + ":" + pendingReactionBanner.emoji;
-      reactionBannerEl.addEventListener("click", ()=>{
-        state.seenReactionKeys.push(seenKey);
-        saveState(state);
-        // Don't just clear the banner — if dad reacted to more than one backlogged day,
-        // there may be another unseen reaction waiting. Re-check so it appears next,
-        // instead of silently dropping every reaction except the single most recent one.
-        checkForNewReaction();
-        renderHome();
-      });
-    }
+    // No click handler for the reaction banner anymore — it's already marked seen the moment
+    // it's queued (see checkForNewReaction), and scheduleReactionBannerFadeOut handles making
+    // it disappear on its own after 5s. There's nothing left for a tap to do.
     const giveUpBtn = document.getElementById("giveUpBtn");
     if(giveUpBtn){
       giveUpBtn.addEventListener("click", ()=>{
