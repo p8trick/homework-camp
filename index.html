@@ -179,6 +179,7 @@
 
   .question-box{ text-align:center; margin:18px 0; }
   .qtext{ font-size:26px; font-weight:800; line-height:1.4; word-break:break-word; }
+  .qtext.big{ font-size:36px; } /* Challenge Mode's question — was silently falling back to the 26px default on phones, only actually getting bigger on iPad landscape below */
   .speak-btn{
     display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; margin-top:8px;
     background:var(--diamond); border:3px solid var(--ink); font-size:18px; cursor:pointer;
@@ -202,11 +203,10 @@
   .feedback.good{color:var(--grass-dark);} .feedback.bad{color:var(--danger);}
 
   .challenge-hearts{ font-size:17px; letter-spacing:2px; }
-  .challenge-timer-big{
-    text-align:center; font-size:44px; font-weight:800; color:var(--night);
-    margin:6px 0 0;
+  .challenge-timer-inline{
+    font-weight:800; font-size:13px; color:var(--stone); transition:font-size .2s ease, color .2s ease;
   }
-  .challenge-timer-big.urgent{ color:var(--danger); animation:urgentPulse .5s ease infinite; }
+  .challenge-timer-inline.urgent{ color:var(--danger); font-size:20px; animation:urgentPulse .5s ease infinite; }
   @keyframes urgentPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.15); } }
   @keyframes bannerSlideIn{
     0%{ transform:translateY(-14px); opacity:0; }
@@ -444,7 +444,8 @@
     .done p{ font-size:16px; }
     .stars-line{ font-size:34px; }
     .badge-banner{ font-size:14px; }
-    .challenge-timer-big{ font-size:64px; }
+    .challenge-timer-inline{ font-size:15px; }
+    .challenge-timer-inline.urgent{ font-size:24px; }
     .challenge-hearts{ font-size:24px; }
   }
 
@@ -771,7 +772,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v3.7.1";
+  const VERSION = "v3.8.0";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
@@ -2525,7 +2526,7 @@
       if(challengeRun.timeLeft <= 10){ if(urgent) sfxTickUrgent(); else sfxTick(); } // ticking sound only kicks in inside the last 10s — silent before that, per feedback that it was grating throughout the whole question
       const el = document.getElementById("challengeTimer");
       if(el){
-        el.textContent = String(challengeRun.timeLeft);
+        el.textContent = "⏱" + challengeRun.timeLeft;
         el.classList.toggle("urgent", urgent);
       }
     }, 1000);
@@ -2548,11 +2549,10 @@
     const q = challengeRun.question;
     overlayCard.innerHTML = `
       <div class="progress-row">
-        <span class="subject-tag math">${t("subjectMath")}</span>
         <span>${t("challengeLevelLabel")(challengeRun.level)}</span>
+        <span class="challenge-timer-inline${challengeRun.timeLeft<=3?' urgent':''}" id="challengeTimer">⏱${challengeRun.timeLeft}</span>
         <span class="challenge-hearts">${"❤️".repeat(challengeRun.heartsLeft)}${"🖤".repeat(CHALLENGE_HEARTS-challengeRun.heartsLeft)}</span>
       </div>
-      <div class="challenge-timer-big" id="challengeTimer">${challengeRun.timeLeft}</div>
       <div class="question-box">
         <div class="qtext big">${q.prompt}</div>
       </div>
