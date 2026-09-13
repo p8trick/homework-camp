@@ -134,7 +134,7 @@
   .cal-cell.done{background:var(--gold); border-color:var(--dirt-dark); cursor:pointer; color:var(--ink);}
   .cal-cell.today{outline:2px dashed var(--night); outline-offset:1px; cursor:pointer; background:var(--diamond);}
   .cal-cell .stardot{
-    position:absolute; bottom:0px; font-size:10px; line-height:1;
+    position:absolute; bottom:0px; font-size:7px; line-height:1;
     text-shadow:-1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink), 1px 1px 0 var(--ink);
   }
   .cal-cell .reactiondot{
@@ -762,7 +762,7 @@
       syncCancelBtn:"取消"
     }
   };
-  const VERSION = "v3.6.7";
+  const VERSION = "v3.6.8";
   function t(key){ return STRINGS[state.lang][key]; }
 
   /* ================= Storage ================= */
